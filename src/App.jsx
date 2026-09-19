@@ -214,7 +214,16 @@ const App = () => {
     <div className={`min-h-screen w-full relative overflow-x-hidden transition-colors duration-400 ${isDark ? 'bg-[#141622]' : 'bg-[#fdfcdc]'}`}>
       <Header
         isFolderOpen={isFolderOpen}
-        onToggleFolder={() => setIsFolderOpen((prev) => !prev)}
+        onToggleFolder={() => {
+          setIsFolderOpen((prev) => {
+            const next = !prev;
+            if (next) {
+              setIsFontPanelOpen(false);
+              setIsSettingsOpen(false);
+            }
+            return next;
+          });
+        }}
         onDownloadNotes={handleDownloadNotes}
         isDownloading={isDownloading}
         isPreviewActive={isPreviewActive}
@@ -223,7 +232,10 @@ const App = () => {
         onToggleSettings={() => {
           setIsSettingsOpen((prev) => {
             const next = !prev;
-            if (next) setIsFontPanelOpen(false);
+            if (next) {
+              setIsFontPanelOpen(false);
+              setIsFolderOpen(false);
+            }
             return next;
           });
         }}
@@ -231,7 +243,10 @@ const App = () => {
         onToggleFontPanel={() => {
           setIsFontPanelOpen((prev) => {
             const next = !prev;
-            if (next) setIsSettingsOpen(false);
+            if (next) {
+              setIsSettingsOpen(false);
+              setIsFolderOpen(false);
+            }
             return next;
           });
         }}
@@ -279,12 +294,12 @@ const App = () => {
       />
 
       {/* Floating Dustbin at the bottom right corner of the page */}
-      <Dustbin />
+      <Dustbin isHidden={isFolderOpen} />
     </div>
   );
 };
 
-function Dustbin() {
+function Dustbin({ isHidden = false }) {
   const [isActive, setIsActive] = useState(false);
 
   React.useEffect(() => {
@@ -303,7 +318,7 @@ function Dustbin() {
 
   return (
     <div
-      className={`dustbin-container ${isActive ? 'is-active' : ''}`}
+      className={`dustbin-container ${isActive ? 'is-active' : ''} ${isHidden ? 'is-hidden' : ''}`}
       data-html2canvas-ignore="true"
       title="Dustbin: Deleted notes dissolve here"
     >

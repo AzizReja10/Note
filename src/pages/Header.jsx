@@ -122,12 +122,16 @@ const Header = ({
   onToggleDark = () => {},
 }) => {
   return (
-    <header className="flex items-center justify-center p-4 relative z-50">
-      <div className="flex items-center">
+    <header
+      className={`flex items-center justify-center p-2 sm:p-4 relative z-50 max-w-full transition-all duration-300 ease-in-out ${
+        isFolderOpen ? 'opacity-0 -translate-y-8 pointer-events-none invisible' : 'opacity-100 translate-y-0 visible'
+      }`}
+    >
+      <div className="flex items-center max-w-full">
         <Dock
           iconMagnification={60}
           iconDistance={100}
-          className="bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/90 dark:border-neutral-700/80 shadow-[0_12px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl rounded-2xl h-[62px] px-3 gap-2.5 items-center"
+          className="bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/90 dark:border-neutral-700/80 shadow-[0_12px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl rounded-2xl h-[56px] sm:h-[62px] px-2 sm:px-3 gap-1.5 sm:gap-2.5 items-center max-w-[98vw]"
         >
           {/* 3D Animated Interactive Folder Trigger */}
           <DockIcon
@@ -186,7 +190,7 @@ const Header = ({
             onClick={onToggleFontPanel}
             title={isFontPanelOpen ? 'Close Font Styles' : 'Change Font Style'}
           >
-            <div className="flex items-center justify-center size-full font-serif font-bold text-[19px] select-none">
+            <div className="flex items-center justify-center size-full font-serif font-bold text-[18px] sm:text-[19px] select-none">
               T
             </div>
           </DockIcon>
@@ -207,8 +211,8 @@ const Header = ({
           </div>
 
           {/* Day / Night Toggle directly inside the Dock pill as the last section */}
-          <div className="flex items-center justify-center px-1.5 py-0.5">
-            <DayNightSwitch isDark={isDark} onToggle={onToggleDark} size="regular" />
+          <div className="flex items-center justify-center px-0.5 sm:px-1.5 py-0.5">
+            <DayNightSwitch isDark={isDark} onToggle={onToggleDark} size="compact" />
           </div>
         </Dock>
       </div>

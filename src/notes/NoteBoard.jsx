@@ -111,14 +111,19 @@ const NoteBoard = ({
     <>
       {/* 3D Folder Dropdown Modal when Folder Dock Icon is clicked */}
       {isFolderOpen && (
-        <div className="fixed inset-0 z-40 flex items-start justify-center pt-20 pb-12 px-4 bg-black/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-          <div className="relative w-full max-w-5xl bg-neutral-900/90 border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onCloseFolder();
+          }}
+          className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-20 pb-8 sm:pb-12 px-2 sm:px-4 bg-black/50 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200"
+        >
+          <div className="relative w-full max-w-5xl bg-neutral-900/95 border border-neutral-800 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-2xl backdrop-blur-xl">
             {/* Header info bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-neutral-800 gap-4">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 sm:pb-5 border-b border-neutral-800 gap-3 sm:gap-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 {/* 3D Folder presentation */}
                 <div className="relative group flex items-center justify-center">
-                  <div className="file relative w-12 h-8 cursor-pointer origin-bottom [perspective:1500px]">
+                  <div className="file relative w-10 sm:w-12 h-7 sm:h-8 cursor-pointer origin-bottom [perspective:1500px]">
                     <div className="work-5 bg-amber-600 w-full h-full origin-top rounded-lg rounded-tl-none group-hover:shadow-[0_10px_20px_rgba(0,0,0,.3)] transition-all ease duration-300 relative after:absolute after:content-[''] after:bottom-[99%] after:left-0 after:w-4 after:h-1.5 after:bg-amber-600 after:rounded-t-lg before:absolute before:content-[''] before:-top-[6px] before:left-[15px] before:w-1.5 before:h-1.5 before:bg-amber-600 before:[clip-path:polygon(0_35%,0%_100%,50%_100%);]" />
                     <div className="work-4 absolute inset-0.5 bg-zinc-400 rounded-lg transition-all ease duration-300 origin-bottom select-none group-hover:[transform:rotateX(-20deg)]" />
                     <div className="work-3 absolute inset-0.5 bg-zinc-300 rounded-lg transition-all ease duration-300 origin-bottom group-hover:[transform:rotateX(-30deg)]" />
@@ -127,18 +132,18 @@ const NoteBoard = ({
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white tracking-tight">Notes & Stickers Collection</h3>
-                  <p className="text-xs text-neutral-400">Click any card to add it to your board</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight">Notes & Stickers Collection</h3>
+                  <p className="text-[11px] sm:text-xs text-neutral-400">Click any card to add it to your board</p>
                 </div>
               </div>
 
               {/* Category Filter Tabs */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center bg-neutral-800/90 p-1 rounded-xl border border-neutral-700/60 text-xs">
+              <div className="flex items-center justify-between sm:justify-end gap-2">
+                <div className="flex items-center bg-neutral-800/90 p-0.5 sm:p-1 rounded-xl border border-neutral-700/60 text-xs">
                   <button
                     type="button"
                     onClick={() => setActiveTab('all')}
-                    className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[11px] sm:text-xs ${
                       activeTab === 'all'
                         ? 'bg-amber-500 text-white shadow-sm'
                         : 'text-neutral-400 hover:text-white'
@@ -149,7 +154,7 @@ const NoteBoard = ({
                   <button
                     type="button"
                     onClick={() => setActiveTab('notes')}
-                    className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[11px] sm:text-xs ${
                       activeTab === 'notes'
                         ? 'bg-amber-500 text-white shadow-sm'
                         : 'text-neutral-400 hover:text-white'
@@ -160,7 +165,7 @@ const NoteBoard = ({
                   <button
                     type="button"
                     onClick={() => setActiveTab('stickers')}
-                    className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[11px] sm:text-xs ${
                       activeTab === 'stickers'
                         ? 'bg-amber-500 text-white shadow-sm'
                         : 'text-neutral-400 hover:text-white'
@@ -173,7 +178,7 @@ const NoteBoard = ({
                 <button
                   type="button"
                   onClick={onCloseFolder}
-                  className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center transition-colors cursor-pointer text-sm ml-2"
+                  className="w-7 sm:w-8 h-7 sm:h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center transition-colors cursor-pointer text-xs sm:text-sm ml-1 sm:ml-2 flex-shrink-0"
                   aria-label="Close"
                 >
                   ✕
