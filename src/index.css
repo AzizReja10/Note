@@ -344,13 +344,226 @@
   background: #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.15s ease, background 0.15s ease;
+  z-index: 30;
+}
+
+.note:hover .note-delete,
+.note.is-selected .note-delete {
+  opacity: 1;
 }
 
 .note-delete:hover {
   transform: scale(1.15);
   background: #fee2e2;
   color: #ef4444;
+}
+
+/* ====================================================
+   NOTE RESIZE & ROTATE CONTROLS
+   ==================================================== */
+
+.note-control-handle {
+  position: absolute;
+  touch-action: none;
+  user-select: none;
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 35;
+  animation: handlePopIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes handlePopIn {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Transform outline when format/transform mode is active */
+.note.is-transforming::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 2px dashed #f59e0b;
+  border-radius: 14px;
+  pointer-events: none;
+  animation: dashPulse 2s linear infinite;
+}
+
+@keyframes dashPulse {
+  0% {
+    border-color: #f59e0b;
+  }
+  50% {
+    border-color: #fbbf24;
+  }
+  100% {
+    border-color: #f59e0b;
+  }
+}
+
+/* Rotate handle - placed above top center */
+.note-rotate-handle {
+  top: -38px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: grab;
+}
+
+.note-rotate-handle:active {
+  cursor: grabbing;
+}
+
+.note-rotate-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.note-rotate-handle:hover .note-rotate-btn {
+  transform: scale(1.12);
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.note-rotate-line {
+  width: 1.5px;
+  height: 10px;
+  background: rgba(37, 99, 235, 0.6);
+}
+
+/* Resize handle - placed on bottom-right corner */
+.note-resize-handle {
+  bottom: -6px;
+  right: -6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: nwse-resize;
+  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.note-resize-handle:hover {
+  transform: scale(1.15);
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.note-resize-handle:active {
+  cursor: nwse-resize;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+/* ====================================================
+   TEXTAREA ROTATE & RESIZE HANDLES (Double-Click Activated)
+   ==================================================== */
+
+.note-text-container.is-text-transforming {
+  outline: 1.5px dashed rgba(59, 130, 246, 0.6) !important;
+  border-radius: 6px;
+}
+
+.text-control-handle {
+  position: absolute;
+  touch-action: none;
+  user-select: none;
+  z-index: 40;
+  animation: handlePopIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.text-rotate-handle {
+  top: -26px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: grab;
+}
+
+.text-rotate-handle:active {
+  cursor: grabbing;
+}
+
+.text-rotate-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.text-rotate-handle:hover .text-rotate-btn {
+  transform: scale(1.15);
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.text-rotate-line {
+  width: 1.5px;
+  height: 6px;
+  background: rgba(37, 99, 235, 0.6);
+}
+
+.text-resize-handle {
+  bottom: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: nwse-resize;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.text-resize-handle:hover {
+  transform: scale(1.2);
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.text-resize-handle:active {
+  cursor: nwse-resize;
+  background: #1d4ed8;
+  color: #ffffff;
 }
 
 /* ====================================================

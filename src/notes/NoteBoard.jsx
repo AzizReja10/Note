@@ -13,13 +13,29 @@ const NoteBoard = ({
   notesManager,
   boardRef: externalBoardRef,
   isPreviewActive = false,
+  activeNoteTransformId = null,
+  activeTextTransformId = null,
+  onToggleNoteTransform = () => {},
+  onToggleTextTransform = () => {},
 }) => {
   const internalBoardRef = useRef(null);
   const boardRef = externalBoardRef || internalBoardRef;
   const [newId, setNewId] = useState(null);
   const fallbackManager = useNotes(storage);
-  const { notes, loaded, addNote, updateText, moveNote, moveTextArea, bringToFront, removeNote } =
-    notesManager || fallbackManager;
+  const {
+    notes,
+    loaded,
+    addNote,
+    updateText,
+    moveNote,
+    moveTextArea,
+    resizeTextArea,
+    rotateTextArea,
+    resizeNote,
+    rotateNote,
+    bringToFront,
+    removeNote,
+  } = notesManager || fallbackManager;
 
   const handleAdd = (type) => {
     const el = boardRef.current;
@@ -180,6 +196,14 @@ const NoteBoard = ({
               onText={updateText}
               onMove={moveNote}
               onMoveTextArea={moveTextArea}
+              onResizeTextArea={resizeTextArea}
+              onRotateTextArea={rotateTextArea}
+              onResize={resizeNote}
+              onRotate={rotateNote}
+              isNoteTransformActive={activeNoteTransformId === note.id}
+              isTextTransformActive={activeTextTransformId === note.id}
+              onToggleNoteTransform={onToggleNoteTransform}
+              onToggleTextTransform={onToggleTextTransform}
               isPreviewActive={isPreviewActive}
               onDelete={removeNote}
               onFront={bringToFront}

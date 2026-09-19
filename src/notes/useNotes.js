@@ -64,6 +64,44 @@ export function useNotes(storage = localStorageAdapter) {
     [patch]
   );
 
+  const resizeTextArea = useCallback(
+    (id, textWidth, textHeight) => {
+      const clampedW = Math.max(80, Math.min(800, Math.round(textWidth)));
+      const clampedH = Math.max(40, Math.min(800, Math.round(textHeight)));
+      patch(id, { textWidth: clampedW, textHeight: clampedH });
+    },
+    [patch]
+  );
+
+  const rotateTextArea = useCallback(
+    (id, textRotation) => {
+      let norm = textRotation % 360;
+      if (norm > 180) norm -= 360;
+      if (norm < -180) norm += 360;
+      patch(id, { textRotation: +norm.toFixed(1) });
+    },
+    [patch]
+  );
+
+  const resizeNote = useCallback(
+    (id, width) => {
+      const clampedWidth = Math.max(140, Math.min(1000, Math.round(width)));
+      patch(id, { width: clampedWidth });
+    },
+    [patch]
+  );
+
+  const rotateNote = useCallback(
+    (id, rotation) => {
+      // Normalize angle between -180 and 180 degrees rounded to 1 decimal place
+      let norm = rotation % 360;
+      if (norm > 180) norm -= 360;
+      if (norm < -180) norm += 360;
+      patch(id, { rotation: +norm.toFixed(1) });
+    },
+    [patch]
+  );
+
   const bringToFront = useCallback(id => patch(id, { z: ++topZ.current }), [patch]);
 
   // Keep all notes within viewport whenever window is resized
@@ -127,5 +165,18 @@ export function useNotes(storage = localStorageAdapter) {
     setNotes(list => list.filter(n => n.id !== id));
   }, []);
 
-  return { notes, loaded, addNote, updateText, moveNote, moveTextArea, bringToFront, removeNote };
+  return {
+    notes,
+    loaded,
+    addNote,
+    updateText,
+    moveNote,
+    moveTextArea,
+    resizeTextArea,
+    rotateTextArea,
+    resizeNote,
+    rotateNote,
+    bringToFront,
+    removeNote,
+  };
 }

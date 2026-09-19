@@ -9,6 +9,8 @@ const App = () => {
   const [isFolderOpen, setIsFolderOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPreviewActive, setIsPreviewActive] = useState(false);
+  const [activeNoteTransformId, setActiveNoteTransformId] = useState(null);
+  const [activeTextTransformId, setActiveTextTransformId] = useState(null);
   const [isDark, setIsDark] = useState(() => {
     try {
       return localStorage.getItem('theme-mode') === 'dark';
@@ -19,6 +21,14 @@ const App = () => {
 
   const boardRef = useRef(null);
   const notesManager = useNotes(localStorageAdapter);
+
+  const handleToggleNoteTransform = (noteId) => {
+    setActiveNoteTransformId((current) => (current === noteId ? null : noteId));
+  };
+
+  const handleToggleTextTransform = (noteId) => {
+    setActiveTextTransformId((current) => (current === noteId ? null : noteId));
+  };
 
   // Sync dark class with <html> and document body
   React.useEffect(() => {
@@ -93,6 +103,10 @@ const App = () => {
         notesManager={notesManager}
         boardRef={boardRef}
         isPreviewActive={isPreviewActive}
+        activeNoteTransformId={activeNoteTransformId}
+        activeTextTransformId={activeTextTransformId}
+        onToggleNoteTransform={handleToggleNoteTransform}
+        onToggleTextTransform={handleToggleTextTransform}
       />
 
       {/* Floating Dustbin at the bottom right corner of the page */}
