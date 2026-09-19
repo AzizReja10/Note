@@ -114,6 +114,8 @@ const Header = ({
   isDownloading = false,
   isPreviewActive = false,
   onTogglePreview = () => {},
+  isSettingsOpen = false,
+  onToggleSettings = () => {},
   isDark = false,
   onToggleDark = () => {},
 }) => {
@@ -176,9 +178,20 @@ const Header = ({
             <Icons.notion className="size-full" />
           </DockIcon>
 
-          <DockIcon className="bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 transition-colors shadow-sm">
-            <Icons.whatsapp className="size-full" />
-          </DockIcon>
+          {/* Settings Button (From Uiverse.io by vinodjangid07) in place of WhatsApp */}
+          <div className="flex items-center justify-center">
+            <button
+              className={`setting-btn ${isSettingsOpen ? 'ring-2 ring-indigo-400 scale-105' : ''}`}
+              type="button"
+              title={isSettingsOpen ? 'Close Settings Panel' : 'Open Settings Panel'}
+              aria-label="Settings"
+              onClick={onToggleSettings}
+            >
+              <span className="bar bar1"></span>
+              <span className="bar bar2"></span>
+              <span className="bar bar1"></span>
+            </button>
+          </div>
 
           {/* Day / Night Toggle directly inside the Dock pill as the last section */}
           <div className="flex items-center justify-center px-1.5 py-0.5">

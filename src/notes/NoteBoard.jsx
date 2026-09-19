@@ -17,6 +17,7 @@ const NoteBoard = ({
   activeTextTransformId = null,
   onToggleNoteTransform = () => {},
   onToggleTextTransform = () => {},
+  onSelectNote = () => {},
 }) => {
   const internalBoardRef = useRef(null);
   const boardRef = externalBoardRef || internalBoardRef;
@@ -27,6 +28,7 @@ const NoteBoard = ({
     loaded,
     addNote,
     updateText,
+    updateTextColor,
     moveNote,
     moveTextArea,
     resizeTextArea,
@@ -207,6 +209,7 @@ const NoteBoard = ({
               isPreviewActive={isPreviewActive}
               onDelete={removeNote}
               onFront={bringToFront}
+              onSelectNote={onSelectNote}
             />
           ))}
       </div>

@@ -22,6 +22,7 @@ function Note({
   isPreviewActive = false,
   onFront,
   onDelete,
+  onSelectNote,
 }) {
   if (!config) return null;
   const [isFocused, setIsFocused] = useState(false);
@@ -35,7 +36,7 @@ function Note({
   const rotateDrag = useRef(null);
   const rootRef = useRef(null);
   const renderRef = useRef(null); // the mirror layer that shows animated characters
-  const chars = useCharTags(note.text);
+  const chars = useCharTags(note.text, note.textColor || '#3a3a3a');
 
   // Unselect when clicking outside this note
   useEffect(() => {
@@ -54,6 +55,7 @@ function Note({
 
     onFront(note.id);
     setIsSelected(true);
+    if (onSelectNote) onSelectNote(note.id);
     drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
     e.currentTarget.setPointerCapture(e.pointerId);
     rootRef.current.classList.add('is-dragging');
@@ -65,6 +67,7 @@ function Note({
     e.preventDefault();
     onFront(note.id);
     setIsSelected(true);
+    if (onSelectNote) onSelectNote(note.id);
     if (onToggleNoteTransform) {
       onToggleNoteTransform(note.id);
     }
@@ -74,6 +77,7 @@ function Note({
   function handleTextareaPointerDown(e) {
     onFront(note.id);
     setIsSelected(true);
+    if (onSelectNote) onSelectNote(note.id);
   }
 
   function handleTextareaDoubleClick(e) {
@@ -85,6 +89,7 @@ function Note({
     }
     onFront(note.id);
     setIsSelected(true);
+    if (onSelectNote) onSelectNote(note.id);
     if (onToggleTextTransform) {
       onToggleTextTransform(note.id);
     }
@@ -299,6 +304,36 @@ function Note({
     }
   }
 
+  const textareaRef = useRef(null);
+
+  // Dynamic max characters calculation based on actual width & height of the text area
+  // Font is Patrick Hand 22px / line-height 1.5 (33px per line).
+  // Characters average ~9.5px in width.
+  const effectiveTextW = note.textWidth || Math.round(renderedWidth * (1 - (config.inset[1] + config.inset[3]) / 100));
+  const effectiveTextH = note.textHeight || Math.round((config.height || (renderedWidth * 0.9)) * (1 - (config.inset[0] + config.inset[2]) / 100));
+  
+  // Calculate character limit: lines * chars_per_line * safety factor (0.92) to guarantee no overflow
+  const charsPerLine = Math.max(8, Math.floor(effectiveTextW / 10.5));
+  const visibleLines = Math.max(2, Math.floor(effectiveTextH / 32));
+  const maxCharLimit = Math.max(30, Math.floor(charsPerLine * visibleLines * 0.92));
+
+  function handleTextChange(e) {
+    const val = e.target.value;
+    const el = e.target;
+    
+    // Check both character count limit and physical scroll height overflow
+    if (val.length > maxCharLimit && val.length > (note.text?.length || 0)) {
+      return; // prevent exceeding character limit
+    }
+    
+    // Check if adding this text would cause textarea content to overflow vertically
+    if (el.scrollHeight > el.clientHeight + 4 && val.length > (note.text?.length || 0)) {
+      return;
+    }
+
+    onText(note.id, val);
+  }
+
   const [isDeleting, setIsDeleting] = useState(false);
   const [disintegrateStyle, setDisintegrateStyle] = useState(null);
 
@@ -327,22 +362,29 @@ function Note({
     const dx = binCenterX - noteCenterX;
     const dy = binCenterY - noteCenterY;
 
-    // Create 18 floating dust particles scattered outward and sucked into dustbin
-    const particles = [];
-    const colors = ['#f59e0b', '#fbbf24', '#d97706', '#e5e7eb', '#fde68a', '#f87171'];
-    for (let i = 0; i < 22; i++) {
+    // Create 64 floating dust particles covering the whole note surface that smoothly scatter in place for 1.5s,
+    // then gracefully glide directly into the dustbin
+    const colors = ['#f59e0b', '#fbbf24', '#d97706', '#fef08a', '#e5e7eb', '#fde68a', '#f87171', '#fb923c'];
+    const noteW = rect?.width || 240;
+    const noteH = rect?.height || 200;
+
+    for (let i = 0; i < 64; i++) {
       const p = document.createElement('div');
       p.className = 'dust-particle';
-      const size = Math.random() * 8 + 4;
-      const spreadX = (Math.random() - 0.5) * (rect?.width || 200) * 0.8;
-      const spreadY = (Math.random() - 0.5) * (rect?.height || 200) * 0.8;
-      const startX = noteCenterX + spreadX;
-      const startY = noteCenterY + spreadY;
-      const pMidX = (binCenterX - startX) * 0.35 + (Math.random() - 0.5) * 140;
-      const pMidY = (binCenterY - startY) * 0.35 - Math.random() * 80;
+      const size = Math.random() * 7 + 3.5;
+      
+      // Radial scatter offset smoothly dispersing outward around note area in place
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 20 + Math.random() * (noteW * 0.75);
+      const scatterX = Math.cos(angle) * radius;
+      const scatterY = Math.sin(angle) * radius;
+
+      // Evenly distributed origin positions across note face
+      const startX = (rect?.left || noteCenterX) + (Math.random() * noteW);
+      const startY = (rect?.top || noteCenterY) + (Math.random() * noteH);
       const pEndX = binCenterX - startX;
       const pEndY = binCenterY - startY;
-      const duration = 0.45 + Math.random() * 0.1;
+      const duration = 2.25 + Math.random() * 0.1;
 
       p.style.width = `${size}px`;
       p.style.height = `${size}px`;
@@ -350,11 +392,13 @@ function Note({
       p.style.top = `${startY}px`;
       p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
       p.style.setProperty('--dust-dur', `${duration}s`);
+      p.style.setProperty('--p-scatter-x', `${scatterX}px`);
+      p.style.setProperty('--p-scatter-y', `${scatterY}px`);
       p.style.setProperty('--p-dx-end', `${pEndX}px`);
       p.style.setProperty('--p-dy-end', `${pEndY}px`);
 
       document.body.appendChild(p);
-      setTimeout(() => p.remove(), duration * 1000 + 50);
+      setTimeout(() => p.remove(), duration * 1000 + 100);
     }
 
     setDisintegrateStyle({
@@ -363,10 +407,10 @@ function Note({
     });
     setIsDeleting(true);
 
-    // Remove from note store once direct linear suction completes
+    // Remove from note store after 2.3s (1.5s full in-place disintegration + 0.8s smooth flight into dustbin)
     setTimeout(() => {
       onDelete(note.id);
-    }, 500);
+    }, 2300);
   }
 
   return (
@@ -453,10 +497,18 @@ function Note({
           </>
         )}
 
-        {/* layer 1 (visible): one <span> per character, new ones animate */}
-        <div ref={renderRef} className="note-text note-render" aria-hidden="true">
+        {/* layer 1 (visible): one <span> per character, new ones animate, individual colors preserved */}
+        <div
+          ref={renderRef}
+          className="note-text note-render"
+          aria-hidden="true"
+        >
           {chars.map((ch) => (
-            <span key={ch.id} className={ch.fresh ? 'ch ch-new' : 'ch'}>
+            <span
+              key={ch.id}
+              className={ch.fresh ? 'ch ch-new' : 'ch'}
+              style={ch.color ? { color: ch.color } : undefined}
+            >
               {ch.c}
             </span>
           ))}
@@ -465,12 +517,14 @@ function Note({
 
         {/* layer 2 (on top): real textarea, transparent text, handles all input */}
         <textarea
+          ref={textareaRef}
           className="note-text note-input"
           placeholder="Write something..."
           aria-label="Note text"
           value={note.text}
+          maxLength={maxCharLimit}
           autoFocus={autoFocus}
-          onChange={(e) => onText(note.id, e.target.value)}
+          onChange={handleTextChange}
           onPointerDown={handleTextareaPointerDown}
           onDoubleClick={handleTextareaDoubleClick}
           onFocus={() => {

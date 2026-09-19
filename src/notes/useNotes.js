@@ -46,6 +46,8 @@ export function useNotes(storage = localStorageAdapter) {
 
   const updateText = useCallback((id, text) => patch(id, { text }), [patch]);
 
+  const updateTextColor = useCallback((id, textColor) => patch(id, { textColor }), [patch]);
+
   const moveNote = useCallback(
     (id, x, y) => {
       const winW = typeof window !== 'undefined' ? window.innerWidth : 1200;
@@ -170,6 +172,7 @@ export function useNotes(storage = localStorageAdapter) {
     loaded,
     addNote,
     updateText,
+    updateTextColor,
     moveNote,
     moveTextArea,
     resizeTextArea,
