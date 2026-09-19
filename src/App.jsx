@@ -115,6 +115,7 @@ const App = () => {
         if (node?.classList?.contains('note-delete')) return false;
         if (node?.classList?.contains('text-drag-handle')) return false;
         if (node?.classList?.contains('note-typing-indicator')) return false;
+        if (node?.classList?.contains('note-typing-badge')) return false;
         if (node?.classList?.contains('note-transform-handle')) return false;
         if (node?.classList?.contains('text-rotate-handle')) return false;
         if (node?.classList?.contains('text-resize-handle')) return false;
@@ -287,19 +288,16 @@ function Dustbin() {
   const [isActive, setIsActive] = useState(false);
 
   React.useEffect(() => {
-    let shakeTimer = null;
-    const handleActivate = () => {
-      // Dustbin begins vibrating enthusiastically as note particles fly towards it around 1.35s
-      shakeTimer = setTimeout(() => {
-        setIsActive(true);
-        setTimeout(() => setIsActive(false), 1000);
-      }, 1350);
+    let off;
+    const onReceive = (e) => {
+      setIsActive(true);
+      clearTimeout(off);
+      off = setTimeout(() => setIsActive(false), e.detail?.duration ?? 800);
     };
-
-    window.addEventListener('dustbin-activate', handleActivate);
+    window.addEventListener('dustbin-receive', onReceive);
     return () => {
-      window.removeEventListener('dustbin-activate', handleActivate);
-      if (shakeTimer) clearTimeout(shakeTimer);
+      window.removeEventListener('dustbin-receive', onReceive);
+      clearTimeout(off);
     };
   }, []);
 

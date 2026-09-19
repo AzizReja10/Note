@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { useCharTags } from './useCharTags';
 import { annotate } from 'rough-notation';
+import { dustDelete } from './dustDelete';
 
 // Classes to style: .note  .note-paper  .note-text  .note-render  .note-input
 //                   .ch  .ch-new  .note-delete  .is-dragging
@@ -598,115 +599,32 @@ function Note({
     onText(note.id, val);
   }
 
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [disintegrateStyle, setDisintegrateStyle] = useState(null);
+  const deleting = useRef(false);
 
   function handleDelete(e) {
     e.stopPropagation();
-    if (isDeleting) return;
+    if (deleting.current) return;
+    deleting.current = true;
 
-    // Trigger dustbin active shake
-    window.dispatchEvent(new CustomEvent('dustbin-activate'));
-
-    // Get note coordinates and bottom-right dustbin coordinates
-    const rect = rootRef.current?.getBoundingClientRect();
-    const dustbinEl = document.querySelector('.dustbin-container');
-    const dustbinRect = dustbinEl?.getBoundingClientRect() || {
-      left: window.innerWidth - 80,
-      top: window.innerHeight - 80,
-      width: 72,
-      height: 72,
-    };
-
-    const noteCenterX = rect ? rect.left + rect.width / 2 : renderLeft + renderedWidth / 2;
-    const noteCenterY = rect ? rect.top + rect.height / 2 : note.y + 150;
-    const binCenterX = dustbinRect.left + dustbinRect.width / 2;
-    const binCenterY = dustbinRect.top + dustbinRect.height / 2;
-
-    const dx = binCenterX - noteCenterX;
-    const dy = binCenterY - noteCenterY;
-
-    // Create 85+ floating luminous dust particles covering the note surface
-    // They burst outward with organic drift & glow, then smoothly swoop along a natural arc into the dustbin
-    const colors = [
-      '#f59e0b', '#fbbf24', '#fef08a', '#fde047',
-      '#fdba74', '#fb923c', '#f87171', '#f472b6',
-      '#e5e7eb', '#ffffff'
-    ];
-    const noteW = rect?.width || 240;
-    const noteH = rect?.height || 200;
-    const totalParticles = 85;
-
-    for (let i = 0; i < totalParticles; i++) {
-      const p = document.createElement('div');
-      p.className = 'dust-particle';
-      const size = Math.random() * 6.5 + 2.5;
-
-      // Organic radial scatter: angle + Gaussian-like distribution
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 25 + Math.pow(Math.random(), 0.75) * (noteW * 0.7);
-      const scatterX = Math.cos(angle) * radius;
-      // Slight buoyant upward bias during the scatter hover
-      const scatterY = Math.sin(angle) * radius - (15 + Math.random() * 25);
-
-      // Evenly distributed origin positions across note face
-      const startX = (rect?.left || noteCenterX) + (Math.random() * noteW);
-      const startY = (rect?.top || noteCenterY) + (Math.random() * noteH);
-      const pEndX = binCenterX - startX;
-      const pEndY = binCenterY - startY;
-
-      // Dynamic curve midpoint: arch upward and outward slightly for a graceful fluid swoop
-      const midCurveX = scatterX * 0.5 + pEndX * 0.45 + (Math.random() * 40 - 20);
-      const midCurveY = scatterY * 0.5 + pEndY * 0.35 - (40 + Math.random() * 50);
-
-      // Staggered durations for natural fluid streaming
-      const duration = 2.3 + (i / totalParticles) * 0.3 + (Math.random() * 0.15 - 0.075);
-      const delay = Math.random() * 0.08;
-
-      p.style.width = `${size}px`;
-      p.style.height = `${size}px`;
-      p.style.left = `${startX}px`;
-      p.style.top = `${startY}px`;
-      p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-      p.style.boxShadow = `0 0 ${Math.round(size * 1.5)}px ${colors[Math.floor(Math.random() * colors.length)]}`;
-      p.style.animationDelay = `${delay}s`;
-      p.style.setProperty('--dust-dur', `${duration}s`);
-      p.style.setProperty('--p-scatter-x', `${scatterX}px`);
-      p.style.setProperty('--p-scatter-y', `${scatterY}px`);
-      p.style.setProperty('--p-mid-x', `${midCurveX}px`);
-      p.style.setProperty('--p-mid-y', `${midCurveY}px`);
-      p.style.setProperty('--p-dx-end', `${pEndX}px`);
-      p.style.setProperty('--p-dy-end', `${pEndY}px`);
-
-      document.body.appendChild(p);
-      setTimeout(() => p.remove(), (duration + delay) * 1000 + 150);
-    }
-
-    setDisintegrateStyle({
-      '--target-dx': `${Math.round(dx * 0.9)}px`,
-      '--target-dy': `${Math.round(dy * 0.9)}px`,
+    dustDelete(rootRef.current, {
+      rotation: note.rotation,
+      origin: { x: e.clientX, y: e.clientY },     // dust ripples outward from the ✕ you clicked
+      onNoteGone: () => onDelete(note.id),         // runs once the paper has faded
     });
-    setIsDeleting(true);
-
-    // Remove from note store after 2.6s (1.4s in-place disintegration + 1.2s smooth fluid flight into dustbin)
-    setTimeout(() => {
-      onDelete(note.id);
-    }, 2600);
   }
 
   return (
     <div
       ref={rootRef}
-      className={`note ${isSelected ? 'is-selected' : ''} ${isFocused ? 'is-focused' : ''} ${isNoteTransformActive ? 'is-transforming' : ''} ${isDeleting ? 'is-disintegrating' : ''}`}
+      className={`note ${isSelected ? 'is-selected' : ''} ${isFocused ? 'is-focused' : ''} ${isNoteTransformActive ? 'is-transforming' : ''}`}
       data-type={note.type}
       style={{
         left: renderLeft,
         top: note.y,
         width: renderedWidth,
-        zIndex: isDeleting ? 9999 : (isNoteTransformActive || isTextTransformActive ? 9990 : note.z),
+        zIndex: isNoteTransformActive || isTextTransformActive ? 9990 : note.z,
         transform: `rotate(${note.rotation}deg)`,
         '--note-inset': config.inset.map((v) => `${v}%`).join(' '),
-        ...(disintegrateStyle || {}),
       }}
       onPointerDown={handleNotePointerDown}
       onDoubleClick={handleNoteDoubleClick}
@@ -837,15 +755,27 @@ function Note({
         />
       </div>
 
-      {/* Small green radio button indicator pinned fixed above the note paper when user is typing */}
+      {/* Animated TYPING indicator badge that appears green when focus is in textarea / in writing mode */}
       {isFocused && (
         <div
-          className="note-typing-indicator"
+          className="note-typing-badge"
           title="Typing active"
           data-html2canvas-ignore="true"
         >
-          <span className="note-typing-ring" />
-          <span className="note-typing-dot" />
+          <span className="note-typing-badge-dot" />
+          <span className="note-typing-badge-text">
+            <span className="t-letter t-1">T</span>
+            <span className="t-letter t-2">Y</span>
+            <span className="t-letter t-3">P</span>
+            <span className="t-letter t-4">I</span>
+            <span className="t-letter t-5">N</span>
+            <span className="t-letter t-6">G</span>
+          </span>
+          <span className="note-typing-dots">
+            <span className="t-dot t-dot-1">.</span>
+            <span className="t-dot t-dot-2">.</span>
+            <span className="t-dot t-dot-3">.</span>
+          </span>
         </div>
       )}
 
