@@ -38,14 +38,16 @@ const NoteBoard = ({
     setNewId(addNote(type, { x, y }));
   };
 
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'notes' | 'stickers'
+
   return (
     <>
       {/* 3D Folder Dropdown Modal when Folder Dock Icon is clicked */}
       {isFolderOpen && (
-        <div className="fixed inset-0 z-40 flex items-start justify-center pt-24 pb-12 px-4 bg-black/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-40 flex items-start justify-center pt-20 pb-12 px-4 bg-black/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
           <div className="relative w-full max-w-5xl bg-neutral-900/90 border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
             {/* Header info bar */}
-            <div className="flex items-center justify-between pb-6 border-b border-neutral-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-neutral-800 gap-4">
               <div className="flex items-center gap-3">
                 {/* 3D Folder presentation */}
                 <div className="relative group flex items-center justify-center">
@@ -58,24 +60,69 @@ const NoteBoard = ({
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white tracking-tight">Notes Gallery Collection</h3>
+                  <h3 className="text-xl font-bold text-white tracking-tight">Notes & Stickers Collection</h3>
                   <p className="text-xs text-neutral-400">Click any card to add it to your board</p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={onCloseFolder}
-                className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center transition-colors cursor-pointer text-sm"
-                aria-label="Close"
-              >
-                ✕
-              </button>
+              {/* Category Filter Tabs */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-neutral-800/90 p-1 rounded-xl border border-neutral-700/60 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('all')}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                      activeTab === 'all'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    All ({Object.keys(types).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('notes')}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                      activeTab === 'notes'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    Notes ({Object.values(types).filter(t => !t.isSticker).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('stickers')}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                      activeTab === 'stickers'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    Stickers ✨ ({Object.values(types).filter(t => t.isSticker).length})
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onCloseFolder}
+                  className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center transition-colors cursor-pointer text-sm ml-2"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            {/* Note Cards in the styled browser card container */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pt-6 max-h-[70vh] overflow-y-auto pr-1">
-              {Object.entries(types).map(([type, cfg], idx) => (
+            {/* Note & Sticker Cards in the styled browser card container */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pt-6 max-h-[65vh] overflow-y-auto pr-1">
+              {Object.entries(types)
+                .filter(([_, cfg]) => {
+                  if (activeTab === 'notes') return !cfg.isSticker;
+                  if (activeTab === 'stickers') return cfg.isSticker;
+                  return true;
+                })
+                .map(([type, cfg], idx) => (
                 <BlurFade key={type} delay={0.05 + idx * 0.03} inView>
                   <div
                     onClick={() => {

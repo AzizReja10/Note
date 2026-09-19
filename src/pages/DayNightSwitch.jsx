@@ -1,8 +1,8 @@
 import React from 'react';
 
-export default function DayNightSwitch({ isDark = false, onToggle = () => {} }) {
+export default function DayNightSwitch({ isDark = false, onToggle = () => {}, size = 'compact' }) {
   return (
-    <div className="day-night-switch-wrapper inline-flex items-center select-none">
+    <div className={`day-night-switch-wrapper inline-flex items-center select-none ${size === 'compact' ? 'day-night-compact' : ''}`}>
       {/* SVG Filters required for sketchy hand-drawn effect */}
       <svg
         style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}

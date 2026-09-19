@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react';
+import { memo, useRef, useState } from 'react';
 import { useCharTags } from './useCharTags';
 
 // Classes to style: .note  .note-paper  .note-text  .note-render  .note-input
@@ -16,6 +16,7 @@ function Note({
   onDelete,
 }) {
   if (!config) return null;
+  const [isFocused, setIsFocused] = useState(false);
   const drag = useRef(null); // { offX, offY } while dragging note
   const textDrag = useRef(null); // { startX, startY, initialOffsetX, initialOffsetY } while dragging textarea
   const rootRef = useRef(null);
@@ -101,18 +102,89 @@ function Note({
     }
   }
 
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [disintegrateStyle, setDisintegrateStyle] = useState(null);
+
+  function handleDelete(e) {
+    e.stopPropagation();
+    if (isDeleting) return;
+
+    // Trigger dustbin active shake
+    window.dispatchEvent(new CustomEvent('dustbin-activate'));
+
+    // Get note coordinates and bottom-right dustbin coordinates
+    const rect = rootRef.current?.getBoundingClientRect();
+    const dustbinEl = document.querySelector('.dustbin-container');
+    const dustbinRect = dustbinEl?.getBoundingClientRect() || {
+      left: window.innerWidth - 80,
+      top: window.innerHeight - 80,
+      width: 72,
+      height: 72,
+    };
+
+    const noteCenterX = rect ? rect.left + rect.width / 2 : renderLeft + renderedWidth / 2;
+    const noteCenterY = rect ? rect.top + rect.height / 2 : note.y + 150;
+    const binCenterX = dustbinRect.left + dustbinRect.width / 2;
+    const binCenterY = dustbinRect.top + dustbinRect.height / 2;
+
+    const dx = binCenterX - noteCenterX;
+    const dy = binCenterY - noteCenterY;
+
+    // Create 18 floating dust particles scattered outward and sucked into dustbin
+    const particles = [];
+    const colors = ['#f59e0b', '#fbbf24', '#d97706', '#e5e7eb', '#fde68a', '#f87171'];
+    for (let i = 0; i < 22; i++) {
+      const p = document.createElement('div');
+      p.className = 'dust-particle';
+      const size = Math.random() * 8 + 4;
+      const spreadX = (Math.random() - 0.5) * (rect?.width || 200) * 0.8;
+      const spreadY = (Math.random() - 0.5) * (rect?.height || 200) * 0.8;
+      const startX = noteCenterX + spreadX;
+      const startY = noteCenterY + spreadY;
+      const pMidX = (binCenterX - startX) * 0.35 + (Math.random() - 0.5) * 140;
+      const pMidY = (binCenterY - startY) * 0.35 - Math.random() * 80;
+      const pEndX = binCenterX - startX;
+      const pEndY = binCenterY - startY;
+      const duration = 0.45 + Math.random() * 0.1;
+
+      p.style.width = `${size}px`;
+      p.style.height = `${size}px`;
+      p.style.left = `${startX}px`;
+      p.style.top = `${startY}px`;
+      p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      p.style.setProperty('--dust-dur', `${duration}s`);
+      p.style.setProperty('--p-dx-end', `${pEndX}px`);
+      p.style.setProperty('--p-dy-end', `${pEndY}px`);
+
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), duration * 1000 + 50);
+    }
+
+    setDisintegrateStyle({
+      '--target-dx': `${Math.round(dx)}px`,
+      '--target-dy': `${Math.round(dy)}px`,
+    });
+    setIsDeleting(true);
+
+    // Remove from note store once direct linear suction completes
+    setTimeout(() => {
+      onDelete(note.id);
+    }, 500);
+  }
+
   return (
     <div
       ref={rootRef}
-      className="note"
+      className={`note ${isDeleting ? 'is-disintegrating' : ''}`}
       data-type={note.type}
       style={{
         left: renderLeft,
         top: note.y,
         width: renderedWidth,
-        zIndex: note.z,
+        zIndex: isDeleting ? 9999 : note.z,
         transform: `rotate(${note.rotation}deg)`,
         '--note-inset': config.inset.map((v) => `${v}%`).join(' '),
+        ...(disintegrateStyle || {}),
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -160,19 +232,35 @@ function Note({
           value={note.text}
           autoFocus={autoFocus}
           onChange={(e) => onText(note.id, e.target.value)}
-          onFocus={() => onFront(note.id)}
+          onFocus={() => {
+            setIsFocused(true);
+            onFront(note.id);
+          }}
+          onBlur={() => setIsFocused(false)}
           onScroll={(e) => {
             if (renderRef.current) renderRef.current.scrollTop = e.target.scrollTop;
           }}
         />
       </div>
 
+      {/* Small green radio button indicator pinned fixed above the note paper when user is typing */}
+      {isFocused && (
+        <div
+          className="note-typing-indicator"
+          title="Typing active"
+          data-html2canvas-ignore="true"
+        >
+          <span className="note-typing-ring" />
+          <span className="note-typing-dot" />
+        </div>
+      )}
+
       <button
         type="button"
         className="note-delete"
         aria-label="Delete note"
         data-html2canvas-ignore="true"
-        onClick={() => onDelete(note.id)}
+        onClick={handleDelete}
       >
         ✕
       </button>

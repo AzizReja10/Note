@@ -94,8 +94,40 @@ const App = () => {
         boardRef={boardRef}
         isPreviewActive={isPreviewActive}
       />
+
+      {/* Floating Dustbin at the bottom right corner of the page */}
+      <Dustbin />
     </div>
   );
 };
+
+function Dustbin() {
+  const [isActive, setIsActive] = useState(false);
+
+  React.useEffect(() => {
+    const handleActivate = () => {
+      setIsActive(true);
+      setTimeout(() => setIsActive(false), 900);
+    };
+
+    window.addEventListener('dustbin-activate', handleActivate);
+    return () => window.removeEventListener('dustbin-activate', handleActivate);
+  }, []);
+
+  return (
+    <div
+      className={`dustbin-container ${isActive ? 'is-active' : ''}`}
+      data-html2canvas-ignore="true"
+      title="Dustbin: Deleted notes dissolve here"
+    >
+      <img
+        src="/dustbin.png"
+        alt="Dustbin"
+        className="dustbin-img"
+        draggable={false}
+      />
+    </div>
+  );
+}
 
 export default App;
