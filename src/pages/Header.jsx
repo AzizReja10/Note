@@ -71,33 +71,135 @@ const Icons = {
       />
     </svg>
   ),
+
+  preview: (props) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ),
+  download: (props) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  ),
+  folder: (props) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    </svg>
+  ),
 }
 
-const Header = () => {
+import DayNightSwitch from './DayNightSwitch'
+
+const Header = ({
+  isFolderOpen = false,
+  onToggleFolder = () => {},
+  onDownloadNotes = () => {},
+  isDownloading = false,
+  isPreviewActive = false,
+  onTogglePreview = () => {},
+  isDark = false,
+  onToggleDark = () => {},
+}) => {
   return (
-    <header className="flex justify-center p-4">
-      <div className="relative">
+    <header className="flex items-center justify-center p-4 relative z-50">
+      <div className="flex items-center gap-3">
         <Dock
           iconMagnification={60}
           iconDistance={100}
-          className="bg-neutral-900/90 border border-neutral-800 shadow-2xl backdrop-blur-md rounded-2xl"
+          className="bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/90 dark:border-neutral-700/80 shadow-[0_12px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl rounded-2xl"
         >
-          <DockIcon className="bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700/40 text-white transition-colors">
-            <Icons.gitHub className="size-full text-white" />
+          {/* 3D Animated Interactive Folder Trigger */}
+          <DockIcon
+            className={`border transition-all duration-300 relative ${
+              isFolderOpen
+                ? 'bg-amber-100/80 border-amber-400 text-amber-600 shadow-[0_0_15px_rgba(245,158,11,0.35)]'
+                : 'bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border-neutral-200 dark:border-neutral-700 text-amber-500 shadow-sm'
+            }`}
+            onClick={onToggleFolder}
+            title={isFolderOpen ? 'Close Notes Collection' : 'Open Notes Collection'}
+          >
+            <div className="relative group flex flex-col items-center justify-center w-full h-full">
+              <div className="file relative w-7 h-5 cursor-pointer origin-bottom [perspective:1500px] z-20">
+                <div className="work-5 bg-amber-600 w-full h-full origin-top rounded-md rounded-tl-none transition-all ease duration-300 relative after:absolute after:content-[''] after:bottom-[99%] after:left-0 after:w-2.5 after:h-1 after:bg-amber-600 after:rounded-t-sm" />
+                <div className="work-4 absolute inset-0.5 bg-zinc-400 rounded-sm transition-all ease duration-300 origin-bottom select-none group-hover:[transform:rotateX(-20deg)]" />
+                <div className="work-3 absolute inset-0.5 bg-zinc-300 rounded-sm transition-all ease duration-300 origin-bottom group-hover:[transform:rotateX(-30deg)]" />
+                <div className="work-2 absolute inset-0.5 bg-zinc-200 rounded-sm transition-all ease duration-300 origin-bottom group-hover:[transform:rotateX(-38deg)]" />
+                <div className="work-1 absolute bottom-0 bg-gradient-to-t from-amber-500 to-amber-400 w-full h-4 rounded-sm rounded-tr-none transition-all ease duration-300 origin-bottom flex items-end group-hover:[transform:rotateX(-46deg)_translateY(1px)] shadow-sm" />
+              </div>
+            </div>
           </DockIcon>
 
-          <DockIcon className="bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700/40 transition-colors">
+          {/* Preview / Text Area Border Positioner Toggle */}
+          <DockIcon
+            className={`border transition-all duration-300 shadow-sm cursor-pointer ${
+              isPreviewActive
+                ? 'bg-blue-500 text-white border-blue-600 shadow-[0_0_15px_rgba(59,130,246,0.4)]'
+                : 'bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:text-blue-600'
+            }`}
+            onClick={onTogglePreview}
+            title={isPreviewActive ? 'Preview ON: Showing text borders (drag to reposition)' : 'Preview OFF: Click to show text borders & reposition'}
+          >
+            <Icons.preview className="size-5 transition-transform" />
+          </DockIcon>
+
+          {/* Download Note Button in place of GitHub */}
+          <DockIcon
+            className={`border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors shadow-sm cursor-pointer ${
+              isDownloading
+                ? 'bg-amber-100 text-amber-600 animate-pulse'
+                : 'bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 hover:text-amber-600'
+            }`}
+            onClick={isDownloading ? undefined : onDownloadNotes}
+            title={isDownloading ? 'Exporting image...' : 'Download Note Board as PNG'}
+          >
+            <Icons.download className={`size-5 transition-transform ${isDownloading ? 'animate-bounce text-amber-600' : 'text-neutral-800 dark:text-neutral-200 hover:text-amber-600'}`} />
+          </DockIcon>
+
+          <DockIcon className="bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 transition-colors shadow-sm">
             <Icons.googleDrive className="size-full" />
           </DockIcon>
 
-          <DockIcon className="bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700/40 transition-colors">
+          <DockIcon className="bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 transition-colors shadow-sm">
             <Icons.notion className="size-full" />
           </DockIcon>
 
-          <DockIcon className="bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700/40 transition-colors">
+          <DockIcon className="bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 transition-colors shadow-sm">
             <Icons.whatsapp className="size-full" />
           </DockIcon>
         </Dock>
+
+        {/* Day / Night Effect Toggle Button */}
+        <div className="flex items-center pl-1">
+          <DayNightSwitch isDark={isDark} onToggle={onToggleDark} />
+        </div>
       </div>
     </header>
   )

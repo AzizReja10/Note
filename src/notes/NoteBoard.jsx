@@ -1,54 +1,146 @@
-import React from 'react'
-import {useRef,useState } from "react";
+import React, { useRef, useState } from 'react';
 import Note from './Note';
-import{NOTE_TYPE} from './noteTypes';
-import {useNotes} from './useNotes';
-import{localStorageAdapter} from './storage';
-const NoteBoard = ({types=NOTE_TYPE,storage=localStorageAdapter}) => {
-    const boardRef=useRef(null);
-    const [newId,setNewId]=useState(null);
-    const{notes,loaded,addNote,updateText,moveNote,bringToFront,removeNote}=useNotes(storage);
-    const handleAdd=()=>{
-    const el=boardRef.current;
-    const w=types[type].width;
-    const x = Math.max(0, (el.clientWidth - w) / 2 + (Math.random() - 0.5) * 200);
-    const y = Math.max(0, el.clientHeight * 0.2 + Math.random() * 120);
-    setNewId(addNote(type, { x, y }));
-    }
-  return (
-        <>
-        <div className="note-picker">
-            {Object.entries(types).map(([type,cfg])=>(
-                <button
-                key={type}
-                type='button'
-                className='note-picker-item'
-                datatype={type}
-                aria-label={`Add ${type.replace('-', ' ')} note`}
-                onClick={()=>handleAdd(type)}
-                >
-                    <img src={cfg.src} alt="" />
-                </button>
-            ))}
-        </div>
-        <div className="board" ref={boardRef}>
-            {
-                loaded&&notes.map(note=>(
-                    <Note
-                    key={note.id}
-                    note={note}
-                     config={types[note.type]}
-                     autoFocus={note.id===newId}
-                     onText={updateText}
-                     onMove={moveNote}
-                     onDelete={removeNote}
-                     onFront={bringToFront}
-                    />
-                ))
-            }
-        </div>
-        </>
-  )
-}
+import { NOTE_TYPE } from './noteTypes';
+import { useNotes } from './useNotes';
+import { localStorageAdapter } from './storage';
+import { BlurFade } from '@/registry/magicui/blur-fade';
 
-export default NoteBoard
+const NoteBoard = ({
+  types = NOTE_TYPE,
+  storage = localStorageAdapter,
+  isFolderOpen = false,
+  onCloseFolder = () => {},
+  notesManager,
+  boardRef: externalBoardRef,
+  isPreviewActive = false,
+}) => {
+  const internalBoardRef = useRef(null);
+  const boardRef = externalBoardRef || internalBoardRef;
+  const [newId, setNewId] = useState(null);
+  const fallbackManager = useNotes(storage);
+  const { notes, loaded, addNote, updateText, moveNote, moveTextArea, bringToFront, removeNote } =
+    notesManager || fallbackManager;
+
+  const handleAdd = (type) => {
+    const el = boardRef.current;
+    const clientWidth = window.innerWidth || el?.clientWidth || document.documentElement.clientWidth;
+    const clientHeight = window.innerHeight || el?.clientHeight || document.documentElement.clientHeight;
+    const rawWidth = types[type]?.width || 380;
+    const isMobile = clientWidth < 640;
+    const effectiveWidth = isMobile ? Math.min(rawWidth, clientWidth - 32) : rawWidth;
+    
+    // Exactly center horizontally:
+    const x = Math.max(16, Math.round((clientWidth - effectiveWidth) / 2));
+    
+    // Center vertically in viewport, offset below header (header is ~60px high)
+    const y = Math.max(isMobile ? 100 : 120, Math.round((clientHeight - 360) / 2));
+    
+    setNewId(addNote(type, { x, y }));
+  };
+
+  return (
+    <>
+      {/* 3D Folder Dropdown Modal when Folder Dock Icon is clicked */}
+      {isFolderOpen && (
+        <div className="fixed inset-0 z-40 flex items-start justify-center pt-24 pb-12 px-4 bg-black/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+          <div className="relative w-full max-w-5xl bg-neutral-900/90 border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+            {/* Header info bar */}
+            <div className="flex items-center justify-between pb-6 border-b border-neutral-800">
+              <div className="flex items-center gap-3">
+                {/* 3D Folder presentation */}
+                <div className="relative group flex items-center justify-center">
+                  <div className="file relative w-12 h-8 cursor-pointer origin-bottom [perspective:1500px]">
+                    <div className="work-5 bg-amber-600 w-full h-full origin-top rounded-lg rounded-tl-none group-hover:shadow-[0_10px_20px_rgba(0,0,0,.3)] transition-all ease duration-300 relative after:absolute after:content-[''] after:bottom-[99%] after:left-0 after:w-4 after:h-1.5 after:bg-amber-600 after:rounded-t-lg before:absolute before:content-[''] before:-top-[6px] before:left-[15px] before:w-1.5 before:h-1.5 before:bg-amber-600 before:[clip-path:polygon(0_35%,0%_100%,50%_100%);]" />
+                    <div className="work-4 absolute inset-0.5 bg-zinc-400 rounded-lg transition-all ease duration-300 origin-bottom select-none group-hover:[transform:rotateX(-20deg)]" />
+                    <div className="work-3 absolute inset-0.5 bg-zinc-300 rounded-lg transition-all ease duration-300 origin-bottom group-hover:[transform:rotateX(-30deg)]" />
+                    <div className="work-2 absolute inset-0.5 bg-zinc-200 rounded-lg transition-all ease duration-300 origin-bottom group-hover:[transform:rotateX(-38deg)]" />
+                    <div className="work-1 absolute bottom-0 bg-gradient-to-t from-amber-500 to-amber-400 w-full h-7 rounded-lg rounded-tr-none transition-all ease duration-300 origin-bottom flex items-end group-hover:shadow-[inset_0_10px_20px_#fbbf24,_inset_0_-10px_20px_#d97706] group-hover:[transform:rotateX(-46deg)_translateY(1px)]" />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white tracking-tight">Notes Gallery Collection</h3>
+                  <p className="text-xs text-neutral-400">Click any card to add it to your board</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onCloseFolder}
+                className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center transition-colors cursor-pointer text-sm"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Note Cards in the styled browser card container */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pt-6 max-h-[70vh] overflow-y-auto pr-1">
+              {Object.entries(types).map(([type, cfg], idx) => (
+                <BlurFade key={type} delay={0.05 + idx * 0.03} inView>
+                  <div
+                    onClick={() => {
+                      handleAdd(type);
+                      onCloseFolder();
+                    }}
+                    className="group bg-white w-full h-64 rounded-lg flex flex-col cursor-pointer border border-neutral-200/80 shadow-md hover:shadow-2xl hover:-translate-y-1.5 transition-all duration-300 overflow-hidden"
+                  >
+                    <div className="flex p-2 gap-1.5 items-center border-b border-neutral-100 bg-neutral-50/50">
+                      <div>
+                        <span className="bg-blue-500 inline-block w-2.5 h-2.5 rounded-full"></span>
+                      </div>
+                      <div className="circle">
+                        <span className="bg-purple-500 inline-block w-2.5 h-2.5 rounded-full"></span>
+                      </div>
+                      <div className="circle">
+                        <span className="bg-pink-500 inline-block w-2.5 h-2.5 rounded-full"></span>
+                      </div>
+                      <span className="ml-auto text-[10px] uppercase font-semibold text-neutral-400 group-hover:text-amber-600 transition-colors">
+                        + Add
+                      </span>
+                    </div>
+                    <div className="card__content flex-1 p-2 flex items-center justify-center relative overflow-hidden bg-gradient-to-b from-transparent to-neutral-50/50">
+                      <img
+                        className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                        src={cfg.src}
+                        alt={`Note ${type}`}
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/80 text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md">
+                          Add Note
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </BlurFade>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+      {/* Floating interactive board layer */}
+      <div className="board" ref={boardRef}>
+        {loaded &&
+          notes.map((note) => (
+            <Note
+              key={note.id}
+              note={note}
+              config={types[note.type] || Object.values(types)[0]}
+              autoFocus={note.id === newId}
+              onText={updateText}
+              onMove={moveNote}
+              onMoveTextArea={moveTextArea}
+              isPreviewActive={isPreviewActive}
+              onDelete={removeNote}
+              onFront={bringToFront}
+            />
+          ))}
+      </div>
+    </>
+  );
+};
+
+export default NoteBoard;

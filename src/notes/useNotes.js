@@ -47,15 +47,85 @@ export function useNotes(storage = localStorageAdapter) {
   const updateText = useCallback((id, text) => patch(id, { text }), [patch]);
 
   const moveNote = useCallback(
-    (id, x, y) => patch(id, { x: Math.max(0, x), y: Math.max(0, y) }),
+    (id, x, y) => {
+      const winW = typeof window !== 'undefined' ? window.innerWidth : 1200;
+      const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
+      const maxX = Math.max(8, winW - 80);
+      const maxY = Math.max(70, winH - 120);
+      const clampedX = Math.min(maxX, Math.max(8, x));
+      const clampedY = Math.min(maxY, Math.max(60, y));
+      patch(id, { x: clampedX, y: clampedY });
+    },
+    [patch]
+  );
+
+  const moveTextArea = useCallback(
+    (id, textOffsetX, textOffsetY) => patch(id, { textOffsetX, textOffsetY }),
     [patch]
   );
 
   const bringToFront = useCallback(id => patch(id, { z: ++topZ.current }), [patch]);
 
+  // Keep all notes within viewport whenever window is resized
+  useEffect(() => {
+    const handleResize = () => {
+      const winW = window.innerWidth;
+      const winH = window.innerHeight;
+      const isNarrow = winW < 640;
+      setNotes((list) => {
+        let changed = false;
+        const updated = list.map((n) => {
+          const noteW = 380;
+          const maxNoteW = Math.min(noteW, winW - 32);
+          const maxX = Math.max(8, winW - maxNoteW - 12);
+          const maxY = Math.max(70, winH - 120);
+
+          let newX = n.x;
+          let newY = n.y;
+
+          if (isNarrow) {
+            // On mobile / small screens, center the note horizontally
+            newX = Math.max(8, (winW - maxNoteW) / 2);
+            changed = true;
+          } else {
+            if (n.x > maxX) {
+              newX = maxX;
+              changed = true;
+            } else if (n.x < 8) {
+              newX = 8;
+              changed = true;
+            }
+          }
+
+          if (n.y > maxY) {
+            newY = maxY;
+            changed = true;
+          } else if (n.y < 60) {
+            newY = 60;
+            changed = true;
+          }
+
+          if (newX !== n.x || newY !== n.y) {
+            return { ...n, x: Math.round(newX), y: Math.round(newY) };
+          }
+          return n;
+        });
+
+        return changed ? updated : list;
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    // Also run once after loading to adjust any out-of-bounds notes from saved storage
+    if (loaded) {
+      handleResize();
+    }
+    return () => window.removeEventListener('resize', handleResize);
+  }, [loaded]);
+
   const removeNote = useCallback(id => {
     setNotes(list => list.filter(n => n.id !== id));
   }, []);
 
-  return { notes, loaded, addNote, updateText, moveNote, bringToFront, removeNote };
+  return { notes, loaded, addNote, updateText, moveNote, moveTextArea, bringToFront, removeNote };
 }
