@@ -116,6 +116,8 @@ const Header = ({
   onTogglePreview = () => {},
   isSettingsOpen = false,
   onToggleSettings = () => {},
+  isFontPanelOpen = false,
+  onToggleFontPanel = () => {},
   isDark = false,
   onToggleDark = () => {},
 }) => {
@@ -174,8 +176,19 @@ const Header = ({
             <Icons.download className={`size-5 transition-transform ${isDownloading ? 'animate-bounce text-amber-600' : 'text-neutral-800 dark:text-neutral-200 hover:text-amber-600'}`} />
           </DockIcon>
 
-          <DockIcon className="bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 transition-colors shadow-sm">
-            <Icons.notion className="size-full" />
+          {/* Font Style Toggle Button (T Icon) in place of Notion */}
+          <DockIcon
+            className={`border transition-all duration-300 shadow-sm cursor-pointer ${
+              isFontPanelOpen
+                ? 'bg-purple-600 text-white border-purple-700 shadow-[0_0_15px_rgba(147,51,234,0.45)]'
+                : 'bg-neutral-100/90 dark:bg-neutral-800 hover:bg-neutral-200/90 dark:hover:bg-neutral-700 border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 hover:text-purple-600'
+            }`}
+            onClick={onToggleFontPanel}
+            title={isFontPanelOpen ? 'Close Font Styles' : 'Change Font Style'}
+          >
+            <div className="flex items-center justify-center size-full font-serif font-bold text-[19px] select-none">
+              T
+            </div>
           </DockIcon>
 
           {/* Settings Button (From Uiverse.io by vinodjangid07) in place of WhatsApp */}

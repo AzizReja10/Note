@@ -48,6 +48,8 @@ export function useNotes(storage = localStorageAdapter) {
 
   const updateTextColor = useCallback((id, textColor) => patch(id, { textColor }), [patch]);
 
+  const updateFontFamily = useCallback((id, fontFamily) => patch(id, { fontFamily }), [patch]);
+
   const addHighlight = useCallback((id, highlight) => {
     setNotes(list =>
       list.map(n => {
@@ -202,6 +204,7 @@ export function useNotes(storage = localStorageAdapter) {
     addNote,
     updateText,
     updateTextColor,
+    updateFontFamily,
     addHighlight,
     removeHighlight,
     clearHighlights,

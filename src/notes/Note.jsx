@@ -782,6 +782,7 @@ function Note({
         <div
           ref={renderRef}
           className="note-text note-render"
+          style={note.fontFamily ? { fontFamily: note.fontFamily } : undefined}
           aria-hidden="true"
         >
           {chars.map((ch, idx) => {
@@ -811,6 +812,7 @@ function Note({
         <textarea
           ref={textareaRef}
           className={`note-text note-input ${isHighlighterActive ? (highlighterMode === 'eraser' ? 'is-eraser-mode' : 'is-highlighter-mode') : ''}`}
+          style={note.fontFamily ? { fontFamily: note.fontFamily } : undefined}
           spellCheck="false"
           autoCorrect="off"
           autoCapitalize="off"

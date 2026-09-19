@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Note from './Note';
 import { NOTE_TYPE } from './noteTypes';
 import { useNotes } from './useNotes';
 import { localStorageAdapter } from './storage';
 import { BlurFade } from '@/registry/magicui/blur-fade';
+import Loader from '../components/ui/Loader';
 
 const NoteBoard = ({
   types = NOTE_TYPE,
@@ -64,6 +65,47 @@ const NoteBoard = ({
   };
 
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'notes' | 'stickers'
+  const [loadedImages, setLoadedImages] = useState({});
+  const [isFolderReady, setIsFolderReady] = useState(false);
+
+  // Pre-check loaded images when modal opens
+  useEffect(() => {
+    if (!isFolderOpen) return;
+    
+    // Check which images are already completed by the browser cache
+    const initialLoaded = {};
+    const entries = Object.entries(types);
+    entries.forEach(([type, cfg]) => {
+      const img = new Image();
+      img.src = cfg.src;
+      if (img.complete) {
+        initialLoaded[type] = true;
+      }
+    });
+    setLoadedImages(initialLoaded);
+
+    // Give a brief smooth breathing moment for network/online loads
+    const timer = setTimeout(() => {
+      setIsFolderReady(true);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [isFolderOpen, types]);
+
+  const handleImageLoad = (type) => {
+    setLoadedImages((prev) => ({ ...prev, [type]: true }));
+  };
+
+  const visibleEntries = Object.entries(types).filter(([_, cfg]) => {
+    if (activeTab === 'notes') return !cfg.isSticker;
+    if (activeTab === 'stickers') return cfg.isSticker;
+    return true;
+  });
+
+  const allVisibleLoaded =
+    isFolderReady &&
+    visibleEntries.length > 0 &&
+    visibleEntries.filter(([type]) => loadedImages[type]).length >= Math.min(visibleEntries.length, 3);
 
   return (
     <>
@@ -139,16 +181,24 @@ const NoteBoard = ({
               </div>
             </div>
 
+            {/* If initial images are still loading, present the requested animated loader matched to the amber note theme */}
+            {!allVisibleLoaded && (
+              <div className="flex flex-col items-center justify-center py-24 gap-4 animate-in fade-in duration-300">
+                <Loader color="#f59e0b" />
+                <p className="text-xs font-medium text-amber-500/80 tracking-wide uppercase">
+                  Loading notes collection...
+                </p>
+              </div>
+            )}
+
             {/* Note & Sticker Cards in the styled browser card container */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pt-6 max-h-[65vh] overflow-y-auto pr-1">
-              {Object.entries(types)
-                .filter(([_, cfg]) => {
-                  if (activeTab === 'notes') return !cfg.isSticker;
-                  if (activeTab === 'stickers') return cfg.isSticker;
-                  return true;
-                })
-                .map(([type, cfg], idx) => (
-                <BlurFade key={type} delay={0.05 + idx * 0.03} inView>
+            <div
+              className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pt-6 max-h-[65vh] overflow-y-auto pr-1 transition-opacity duration-300 ${
+                allVisibleLoaded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden pointer-events-none'
+              }`}
+            >
+              {visibleEntries.map(([type, cfg], idx) => (
+                <BlurFade key={type} delay={0.03 + idx * 0.02} inView>
                   <div
                     onClick={() => {
                       handleAdd(type);
@@ -171,13 +221,20 @@ const NoteBoard = ({
                       </span>
                     </div>
                     <div className="card__content flex-1 p-2 flex items-center justify-center relative overflow-hidden bg-gradient-to-b from-transparent to-neutral-50/50">
+                      {!loadedImages[type] && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-neutral-50/90 z-10">
+                          <Loader color="#f59e0b" className="scale-60" />
+                        </div>
+                      )}
                       <img
-                        className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                        className={`max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-105 transition-all duration-300 pointer-events-none ${
+                          loadedImages[type] ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                        }`}
                         src={cfg.src}
                         alt={`Note ${type}`}
-                        loading="lazy"
+                        onLoad={() => handleImageLoad(type)}
                       />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center z-20">
                         <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/80 text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md">
                           Add Note
                         </span>

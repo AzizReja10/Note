@@ -13,6 +13,7 @@ const App = () => {
   const [activeTextTransformId, setActiveTextTransformId] = useState(null);
   const [selectedNoteId, setSelectedNoteId] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isFontPanelOpen, setIsFontPanelOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => {
     try {
       return localStorage.getItem('theme-mode') === 'dark';
@@ -50,6 +51,19 @@ const App = () => {
     }
   };
 
+  const handleFontSelect = (fontFamily) => {
+    const targetId = selectedNoteId || activeTextTransformId || activeNoteTransformId || notesManager.notes[notesManager.notes.length - 1]?.id;
+    if (targetId && notesManager.updateFontFamily) {
+      notesManager.updateFontFamily(targetId, fontFamily);
+    }
+  };
+
+  // Find active note font family for previewing selected font in customizer
+  const currentActiveNote = notesManager.notes.find(
+    (n) => n.id === (selectedNoteId || activeTextTransformId || activeNoteTransformId)
+  ) || notesManager.notes[notesManager.notes.length - 1];
+  const activeFontFamily = currentActiveNote?.fontFamily || "'Patrick Hand', cursive, sans-serif";
+
   // Sync dark class with <html> and document body
   React.useEffect(() => {
     if (isDark) {
@@ -64,8 +78,8 @@ const App = () => {
   // Turn off note and text rotate/resize transforms on single click outside any note
   React.useEffect(() => {
     const handleGlobalClick = (e) => {
-      // If clicking inside a note, its handles, or header / modals / settings, don't dismiss
-      if (e.target.closest('.note, .header, .file, .folder-modal, .settings-bottom-panel, .setting-btn')) return;
+      // If clicking inside a note, its handles, or header / modals / settings / font customizer, don't dismiss
+      if (e.target.closest('.note, .header, .file, .folder-modal, .settings-bottom-panel, .setting-btn, .font-customizer-panel')) return;
       setActiveNoteTransformId(null);
       setActiveTextTransformId(null);
     };
@@ -86,27 +100,104 @@ const App = () => {
       return;
     }
 
+    // Find all rendered note elements on the board
+    const noteElements = Array.from(boardEl.querySelectorAll('.note:not(.is-disintegrating)'));
+    if (noteElements.length === 0) {
+      alert('No notes found on board.');
+      return;
+    }
+
     try {
       setIsDownloading(true);
 
-      // Filter out delete buttons, drag handles, and modal overlays if any
+      // Filter out delete buttons, transform/drag handles, and typing indicators
       const filter = (node) => {
         if (node?.classList?.contains('note-delete')) return false;
         if (node?.classList?.contains('text-drag-handle')) return false;
+        if (node?.classList?.contains('note-typing-indicator')) return false;
+        if (node?.classList?.contains('note-transform-handle')) return false;
+        if (node?.classList?.contains('text-rotate-handle')) return false;
+        if (node?.classList?.contains('text-resize-handle')) return false;
         if (node?.getAttribute && node.getAttribute('data-html2canvas-ignore') === 'true') return false;
         return true;
       };
 
-      const dataUrl = await toPng(boardEl, {
-        backgroundColor: isDark ? '#141622' : '#fdfcdc',
-        pixelRatio: 2, // High-resolution export
+      // Temporarily remove transform border highlights and focus indicators during snapshot
+      const activeTransforms = boardEl.querySelectorAll('.is-transforming, .is-text-transforming, .is-selected');
+      activeTransforms.forEach((el) => {
+        el.dataset.tempTransforming = el.className;
+        el.classList.remove('is-transforming', 'is-text-transforming', 'is-selected');
+      });
+
+      // Calculate the collective bounding box of all notes and stickers
+      const boardRect = boardEl.getBoundingClientRect();
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+
+      noteElements.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.left < minX) minX = rect.left;
+        if (rect.top < minY) minY = rect.top;
+        if (rect.right > maxX) maxX = rect.right;
+        if (rect.bottom > maxY) maxY = rect.bottom;
+      });
+
+      // Add a clean 24px aesthetic padding around the notes cluster
+      const padding = 24;
+      const cropLeft = Math.max(0, Math.floor(minX - boardRect.left - padding));
+      const cropTop = Math.max(0, Math.floor(minY - boardRect.top - padding));
+      const cropWidth = Math.min(boardRect.width - cropLeft, Math.ceil(maxX - minX + padding * 2));
+      const cropHeight = Math.min(boardRect.height - cropTop, Math.ceil(maxY - minY + padding * 2));
+
+      // Capture high-resolution PNG of the entire board first
+      const pixelRatio = 2;
+      const fullDataUrl = await toPng(boardEl, {
+        pixelRatio,
         filter,
         cacheBust: true,
       });
 
+      // Restore any transform / selection classes
+      activeTransforms.forEach((el) => {
+        if (el.dataset.tempTransforming) {
+          el.className = el.dataset.tempTransforming;
+          delete el.dataset.tempTransforming;
+        }
+      });
+
+      // Crop the high-res canvas to only the notes and stickers bounding box
+      const img = new Image();
+      img.src = fullDataUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = cropWidth * pixelRatio;
+      croppedCanvas.height = cropHeight * pixelRatio;
+      const ctx = croppedCanvas.getContext('2d');
+
+      // Draw cropped area onto target canvas
+      ctx.drawImage(
+        img,
+        cropLeft * pixelRatio,
+        cropTop * pixelRatio,
+        cropWidth * pixelRatio,
+        cropHeight * pixelRatio,
+        0,
+        0,
+        cropWidth * pixelRatio,
+        cropHeight * pixelRatio
+      );
+
+      const croppedDataUrl = croppedCanvas.toDataURL('image/png');
+
       const link = document.createElement('a');
       link.download = `sticky-notes-${Date.now()}.png`;
-      link.href = dataUrl;
+      link.href = croppedDataUrl;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -128,7 +219,21 @@ const App = () => {
         isPreviewActive={isPreviewActive}
         onTogglePreview={() => setIsPreviewActive((prev) => !prev)}
         isSettingsOpen={isSettingsOpen}
-        onToggleSettings={() => setIsSettingsOpen((prev) => !prev)}
+        onToggleSettings={() => {
+          setIsSettingsOpen((prev) => {
+            const next = !prev;
+            if (next) setIsFontPanelOpen(false);
+            return next;
+          });
+        }}
+        isFontPanelOpen={isFontPanelOpen}
+        onToggleFontPanel={() => {
+          setIsFontPanelOpen((prev) => {
+            const next = !prev;
+            if (next) setIsSettingsOpen(false);
+            return next;
+          });
+        }}
         isDark={isDark}
         onToggleDark={setIsDark}
       />
@@ -147,6 +252,14 @@ const App = () => {
         highlighterColor={highlighterColor}
         highlighterType={highlighterType}
         highlighterMode={highlighterMode}
+      />
+
+      {/* Font Customizer Box (Toggled by the 'T' icon in the header) */}
+      <FontCustomizerPanel
+        isOpen={isFontPanelOpen}
+        onClose={() => setIsFontPanelOpen(false)}
+        activeFontFamily={activeFontFamily}
+        onSelectFont={handleFontSelect}
       />
 
       {/* Settings Bottom Floating Panel (From Uiverse.io by emmanuelh-dev) */}
@@ -515,6 +628,137 @@ function SettingsBottomPanel({
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const FONT_OPTIONS = [
+  {
+    id: 'patrick-hand',
+    label: 'Patrick Hand',
+    category: 'Handwriting',
+    fontFamily: "'Patrick Hand', cursive, sans-serif",
+    previewText: 'Handwritten notes',
+  },
+  {
+    id: 'open-sans',
+    label: 'Open Sans',
+    category: 'Clean Sans',
+    fontFamily: "'Open Sans Variable', sans-serif",
+    previewText: 'Modern & Clean',
+  },
+  {
+    id: 'caveat',
+    label: 'Caveat',
+    category: 'Casual Script',
+    fontFamily: "'Caveat', cursive",
+    previewText: 'Playful cursive',
+  },
+  {
+    id: 'kalam',
+    label: 'Kalam',
+    category: 'Marker Pen',
+    fontFamily: "'Kalam', cursive",
+    previewText: 'Felt tip pen',
+  },
+  {
+    id: 'dancing-script',
+    label: 'Dancing Script',
+    category: 'Calligraphy',
+    fontFamily: "'Dancing Script', cursive",
+    previewText: 'Elegant flow',
+  },
+  {
+    id: 'shadows',
+    label: 'Shadows Into Light',
+    category: 'Dainty Neat',
+    fontFamily: "'Shadows Into Light', cursive",
+    previewText: 'Delicate script',
+  },
+  {
+    id: 'monospace',
+    label: 'Typewriter Mono',
+    category: 'Monospace',
+    fontFamily: "'Courier New', Courier, monospace",
+    previewText: 'Retro typewriter',
+  },
+];
+
+function FontCustomizerPanel({
+  isOpen,
+  onClose,
+  activeFontFamily,
+  onSelectFont = () => {},
+}) {
+  return (
+    <div
+      className={`font-customizer-panel ${isOpen ? 'panel-open' : 'panel-closed'}`}
+      data-html2canvas-ignore="true"
+    >
+      <div className="settings-card font-customizer-card">
+        {/* Top header bar with 3 colored macOS dots */}
+        <div className="flex items-center justify-between px-3.5 pt-2 pb-1 border-b border-neutral-100 dark:border-neutral-800/80">
+          <div className="flex items-center gap-1.5">
+            <span className="bg-red-500 inline-block w-2.5 h-2.5 rounded-full shadow-sm" />
+            <span className="bg-amber-500 inline-block w-2.5 h-2.5 rounded-full shadow-sm" />
+            <span className="bg-emerald-500 inline-block w-2.5 h-2.5 rounded-full shadow-sm" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[14px] font-serif font-bold text-purple-600 dark:text-purple-400">T</span>
+            <span className="text-[11px] font-semibold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase select-none">
+              Font Style Customizer
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 text-xs px-1 rounded transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Font List Pills */}
+        <div className="font-customizer-content">
+          <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 no-scrollbar">
+            {FONT_OPTIONS.map((font) => {
+              const isSelected =
+                activeFontFamily &&
+                (activeFontFamily === font.fontFamily ||
+                  activeFontFamily.toLowerCase().includes(font.label.toLowerCase().replace(/\s+/g, '')));
+
+              return (
+                <button
+                  key={font.id}
+                  type="button"
+                  onClick={() => onSelectFont(font.fontFamily)}
+                  className={`font-picker-item ${isSelected ? 'is-selected' : ''}`}
+                  title={`Apply ${font.label} to selected note`}
+                >
+                  <span
+                    className="font-picker-preview"
+                    style={{ fontFamily: font.fontFamily }}
+                  >
+                    Aa
+                  </span>
+                  <div className="font-picker-info">
+                    <span
+                      className="font-picker-name"
+                      style={{ fontFamily: font.fontFamily }}
+                    >
+                      {font.label}
+                    </span>
+                    <span className="font-picker-desc">
+                      {font.category}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
