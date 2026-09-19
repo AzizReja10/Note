@@ -48,6 +48,35 @@ export function useNotes(storage = localStorageAdapter) {
 
   const updateTextColor = useCallback((id, textColor) => patch(id, { textColor }), [patch]);
 
+  const addHighlight = useCallback((id, highlight) => {
+    setNotes(list =>
+      list.map(n => {
+        if (n.id !== id) return n;
+        const prevHighlights = n.highlights || [];
+        return {
+          ...n,
+          highlights: [...prevHighlights, highlight],
+        };
+      })
+    );
+  }, []);
+
+  const removeHighlight = useCallback((id, highlightId) => {
+    setNotes(list =>
+      list.map(n => {
+        if (n.id !== id) return n;
+        return {
+          ...n,
+          highlights: (n.highlights || []).filter(h => h.id !== highlightId),
+        };
+      })
+    );
+  }, []);
+
+  const clearHighlights = useCallback((id) => {
+    patch(id, { highlights: [] });
+  }, [patch]);
+
   const moveNote = useCallback(
     (id, x, y) => {
       const winW = typeof window !== 'undefined' ? window.innerWidth : 1200;
@@ -173,6 +202,9 @@ export function useNotes(storage = localStorageAdapter) {
     addNote,
     updateText,
     updateTextColor,
+    addHighlight,
+    removeHighlight,
+    clearHighlights,
     moveNote,
     moveTextArea,
     resizeTextArea,

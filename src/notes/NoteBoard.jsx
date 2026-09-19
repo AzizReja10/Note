@@ -18,6 +18,10 @@ const NoteBoard = ({
   onToggleNoteTransform = () => {},
   onToggleTextTransform = () => {},
   onSelectNote = () => {},
+  isHighlighterActive = false,
+  highlighterColor = '#facc15',
+  highlighterType = 'highlight',
+  highlighterMode = 'draw', // 'draw' | 'eraser'
 }) => {
   const internalBoardRef = useRef(null);
   const boardRef = externalBoardRef || internalBoardRef;
@@ -29,6 +33,9 @@ const NoteBoard = ({
     addNote,
     updateText,
     updateTextColor,
+    addHighlight,
+    removeHighlight,
+    clearHighlights,
     moveNote,
     moveTextArea,
     resizeTextArea,
@@ -210,6 +217,13 @@ const NoteBoard = ({
               onDelete={removeNote}
               onFront={bringToFront}
               onSelectNote={onSelectNote}
+              isHighlighterActive={isHighlighterActive}
+              highlighterColor={highlighterColor}
+              highlighterType={highlighterType}
+              highlighterMode={highlighterMode}
+              onAddHighlight={addHighlight}
+              onRemoveHighlight={removeHighlight}
+              onClearHighlights={clearHighlights}
             />
           ))}
       </div>

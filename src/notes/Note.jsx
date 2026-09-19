@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { useCharTags } from './useCharTags';
+import { annotate } from 'rough-notation';
 
 // Classes to style: .note  .note-paper  .note-text  .note-render  .note-input
 //                   .ch  .ch-new  .note-delete  .is-dragging
@@ -23,6 +24,13 @@ function Note({
   onFront,
   onDelete,
   onSelectNote,
+  isHighlighterActive = false,
+  highlighterColor = '#facc15',
+  highlighterType = 'highlight',
+  highlighterMode = 'draw', // 'draw' | 'eraser'
+  onAddHighlight,
+  onRemoveHighlight,
+  onClearHighlights,
 }) {
   if (!config) return null;
   const [isFocused, setIsFocused] = useState(false);
@@ -73,14 +81,270 @@ function Note({
     }
   }
 
+  // Highlight drawing state
+  const isHighlightDrawing = useRef(false);
+  const highlightStartCharIndex = useRef(null);
+  const [activeHighlightRange, setActiveHighlightRange] = useState(null); // { start, end }
+  const annotationsRef = useRef([]); // holds active rough-notation instances
+
+  // Re-render Rough Annotations whenever note.highlights, note.text, or size changes
+  useEffect(() => {
+    // Clear old rough-notation instances
+    annotationsRef.current.forEach((ann) => {
+      try {
+        ann.remove();
+      } catch (err) {
+        // ignore
+      }
+    });
+    annotationsRef.current = [];
+
+    if (!note.highlights || note.highlights.length === 0 || !renderRef.current) return;
+
+    // For each saved highlight, find the start and end span, wrap in an annotation-wrapper span, and attach annotate()
+    const spans = Array.from(renderRef.current.querySelectorAll('.note-char-span'));
+    if (spans.length === 0) return;
+
+    note.highlights.forEach((hl) => {
+      const startIndex = Math.max(0, Math.min(spans.length - 1, hl.startIndex));
+      const endIndex = Math.max(0, Math.min(spans.length - 1, hl.endIndex));
+      if (startIndex > endIndex) return;
+
+      const rangeSpans = spans.slice(startIndex, endIndex + 1);
+      if (rangeSpans.length === 0) return;
+
+      // Group consecutive spans on each visual line to annotate cleanly
+      // Or annotate the first and last span to highlight individual words/lines
+      // To ensure text is fully visible, we create an inline wrapper around the highlighted character group
+      try {
+        // Group by line: detect line wraps by comparing rect top
+        let currentLine = [rangeSpans[0]];
+        const lines = [currentLine];
+
+        for (let i = 1; i < rangeSpans.length; i++) {
+          const prevRect = rangeSpans[i - 1].getBoundingClientRect();
+          const currRect = rangeSpans[i].getBoundingClientRect();
+          // If vertical difference is greater than 10px, it wrapped to the next line
+          if (Math.abs(currRect.top - prevRect.top) > 10) {
+            currentLine = [rangeSpans[i]];
+            lines.push(currentLine);
+          } else {
+            currentLine.push(rangeSpans[i]);
+          }
+        }
+
+        lines.forEach((lineSpans) => {
+          const first = lineSpans[0];
+          const last = lineSpans[lineSpans.length - 1];
+
+          const parentRect = renderRef.current.getBoundingClientRect();
+          const firstRect = first.getBoundingClientRect();
+          const lastRect = last.getBoundingClientRect();
+
+          const targetEl = document.createElement('span');
+          targetEl.className = 'rough-target-span';
+          targetEl.style.position = 'absolute';
+          // Neatly sized target element tightly matching character bounds
+          targetEl.style.top = `${firstRect.top - parentRect.top}px`;
+          targetEl.style.left = `${firstRect.left - parentRect.left - 1}px`;
+          targetEl.style.width = `${Math.max(8, lastRect.right - firstRect.left + 2)}px`;
+          targetEl.style.height = `${Math.max(14, Math.max(firstRect.height, lastRect.height))}px`;
+
+          renderRef.current.appendChild(targetEl);
+
+          // For highlight type, use semi-transparent rgba or pastel colors so letters are 100% visible
+          let hlColor = hl.color || '#fde047';
+          // If it's a 6-digit hex color, convert to 65% opacity rgba for highlight background
+          if (hl.type === 'highlight' && hlColor.startsWith('#') && hlColor.length === 7) {
+            const r = parseInt(hlColor.slice(1, 3), 16);
+            const g = parseInt(hlColor.slice(3, 5), 16);
+            const b = parseInt(hlColor.slice(5, 7), 16);
+            hlColor = `rgba(${r}, ${g}, ${b}, 0.65)`;
+          }
+
+          const ann = annotate(targetEl, {
+            type: hl.type || 'highlight',
+            color: hlColor,
+            animate: false,
+            multiline: false,
+            padding: hl.type === 'highlight' ? [1, 3] : [0, 2],
+            strokeWidth: hl.type === 'highlight' ? 1.5 : 2,
+            iterations: 1, // Single crisp iteration avoids giant slanted stacked blocks
+          });
+          ann.show();
+
+          annotationsRef.current.push({
+            remove: () => {
+              try {
+                ann.remove();
+              } catch (e) {}
+              if (targetEl.parentNode) targetEl.parentNode.removeChild(targetEl);
+            },
+          });
+        });
+      } catch (err) {
+        console.error('Error creating rough-notation annotation:', err);
+      }
+    });
+
+    return () => {
+      annotationsRef.current.forEach((ann) => {
+        try {
+          ann.remove();
+        } catch (err) {
+          // ignore
+        }
+      });
+      annotationsRef.current = [];
+    };
+  }, [note.highlights, note.text, note.width, note.textWidth, note.textHeight]);
+
+  // Helper to find char index from coordinates within renderRef
+  const getCharIndexFromPoint = (clientX, clientY) => {
+    if (!renderRef.current) return -1;
+    const spans = Array.from(renderRef.current.querySelectorAll('.note-char-span'));
+    if (spans.length === 0) return -1;
+
+    // Check closest span by Euclidean distance
+    let closestIndex = -1;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < spans.length; i++) {
+      const rect = spans[i].getBoundingClientRect();
+      // Check if point is inside this character rect
+      if (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      ) {
+        return i;
+      }
+      // Calculate distance to center
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const dist = Math.hypot(clientX - centerX, clientY - centerY);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = i;
+      }
+    }
+
+    return minDistance < 40 ? closestIndex : -1;
+  };
+
+  // Highlighter Pen Pointer Event Handlers
+  // Highlighter Pen / Eraser Pointer Event Handlers
+  const handleHighlighterPointerDown = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onFront(note.id);
+    setIsSelected(true);
+    if (onSelectNote) onSelectNote(note.id);
+
+    const charIndex = getCharIndexFromPoint(e.clientX, e.clientY);
+    if (charIndex !== -1) {
+      if (highlighterMode === 'eraser') {
+        // Find if this character is within any highlight and remove it immediately
+        if (note.highlights && note.highlights.length > 0) {
+          const hitHighlight = note.highlights.find(
+            (hl) => charIndex >= hl.startIndex && charIndex <= hl.endIndex
+          );
+          if (hitHighlight && onRemoveHighlight) {
+            onRemoveHighlight(note.id, hitHighlight.id);
+          }
+        }
+        isHighlightDrawing.current = true;
+        highlightStartCharIndex.current = charIndex;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      isHighlightDrawing.current = true;
+      highlightStartCharIndex.current = charIndex;
+      setActiveHighlightRange({ start: charIndex, end: charIndex });
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  };
+
+  const handleHighlighterPointerMove = (e) => {
+    if (!isHighlightDrawing.current) return;
+    const charIndex = getCharIndexFromPoint(e.clientX, e.clientY);
+    if (charIndex !== -1) {
+      if (highlighterMode === 'eraser') {
+        // Erase any highlight that the eraser crosses over while moving
+        if (note.highlights && note.highlights.length > 0) {
+          const hitHighlight = note.highlights.find(
+            (hl) => charIndex >= hl.startIndex && charIndex <= hl.endIndex
+          );
+          if (hitHighlight && onRemoveHighlight) {
+            onRemoveHighlight(note.id, hitHighlight.id);
+          }
+        }
+        return;
+      }
+
+      const start = Math.min(highlightStartCharIndex.current, charIndex);
+      const end = Math.max(highlightStartCharIndex.current, charIndex);
+      setActiveHighlightRange({ start, end });
+    }
+  };
+
+  const handleHighlighterPointerUp = (e) => {
+    if (!isHighlightDrawing.current) return;
+    isHighlightDrawing.current = false;
+
+    if (highlighterMode === 'eraser') {
+      highlightStartCharIndex.current = null;
+      return;
+    }
+
+    if (activeHighlightRange && activeHighlightRange.start !== -1) {
+      let startIndex = activeHighlightRange.start;
+      let endIndex = activeHighlightRange.end;
+
+      // If user simply clicked on a word without dragging, expand to highlight the whole word or character
+      if (startIndex === endIndex && note.text) {
+        const text = note.text;
+        // Expand left to start of word
+        while (startIndex > 0 && !/\s/.test(text[startIndex - 1])) {
+          startIndex--;
+        }
+        // Expand right to end of word
+        while (endIndex < text.length - 1 && !/\s/.test(text[endIndex + 1])) {
+          endIndex++;
+        }
+      }
+
+      if (onAddHighlight) {
+        onAddHighlight(note.id, {
+          id: crypto.randomUUID(),
+          startIndex,
+          endIndex,
+          color: highlighterColor || '#fde047',
+          type: highlighterType || 'highlight', // Rough highlight
+          createdAt: Date.now(),
+        });
+      }
+    }
+
+    setActiveHighlightRange(null);
+    highlightStartCharIndex.current = null;
+  };
+
   // Double-click specifically on textarea: toggles textarea rotate/resize without selecting text
   function handleTextareaPointerDown(e) {
+    if (isHighlighterActive) {
+      handleHighlighterPointerDown(e);
+      return;
+    }
     onFront(note.id);
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
   }
 
   function handleTextareaDoubleClick(e) {
+    if (isHighlighterActive) return;
     e.preventDefault();
     e.stopPropagation();
     // Remove browser default double-click text highlight
@@ -362,55 +626,72 @@ function Note({
     const dx = binCenterX - noteCenterX;
     const dy = binCenterY - noteCenterY;
 
-    // Create 64 floating dust particles covering the whole note surface that smoothly scatter in place for 1.5s,
-    // then gracefully glide directly into the dustbin
-    const colors = ['#f59e0b', '#fbbf24', '#d97706', '#fef08a', '#e5e7eb', '#fde68a', '#f87171', '#fb923c'];
+    // Create 85+ floating luminous dust particles covering the note surface
+    // They burst outward with organic drift & glow, then smoothly swoop along a natural arc into the dustbin
+    const colors = [
+      '#f59e0b', '#fbbf24', '#fef08a', '#fde047',
+      '#fdba74', '#fb923c', '#f87171', '#f472b6',
+      '#e5e7eb', '#ffffff'
+    ];
     const noteW = rect?.width || 240;
     const noteH = rect?.height || 200;
+    const totalParticles = 85;
 
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < totalParticles; i++) {
       const p = document.createElement('div');
       p.className = 'dust-particle';
-      const size = Math.random() * 7 + 3.5;
-      
-      // Radial scatter offset smoothly dispersing outward around note area in place
+      const size = Math.random() * 6.5 + 2.5;
+
+      // Organic radial scatter: angle + Gaussian-like distribution
       const angle = Math.random() * Math.PI * 2;
-      const radius = 20 + Math.random() * (noteW * 0.75);
+      const radius = 25 + Math.pow(Math.random(), 0.75) * (noteW * 0.7);
       const scatterX = Math.cos(angle) * radius;
-      const scatterY = Math.sin(angle) * radius;
+      // Slight buoyant upward bias during the scatter hover
+      const scatterY = Math.sin(angle) * radius - (15 + Math.random() * 25);
 
       // Evenly distributed origin positions across note face
       const startX = (rect?.left || noteCenterX) + (Math.random() * noteW);
       const startY = (rect?.top || noteCenterY) + (Math.random() * noteH);
       const pEndX = binCenterX - startX;
       const pEndY = binCenterY - startY;
-      const duration = 2.25 + Math.random() * 0.1;
+
+      // Dynamic curve midpoint: arch upward and outward slightly for a graceful fluid swoop
+      const midCurveX = scatterX * 0.5 + pEndX * 0.45 + (Math.random() * 40 - 20);
+      const midCurveY = scatterY * 0.5 + pEndY * 0.35 - (40 + Math.random() * 50);
+
+      // Staggered durations for natural fluid streaming
+      const duration = 2.3 + (i / totalParticles) * 0.3 + (Math.random() * 0.15 - 0.075);
+      const delay = Math.random() * 0.08;
 
       p.style.width = `${size}px`;
       p.style.height = `${size}px`;
       p.style.left = `${startX}px`;
       p.style.top = `${startY}px`;
       p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      p.style.boxShadow = `0 0 ${Math.round(size * 1.5)}px ${colors[Math.floor(Math.random() * colors.length)]}`;
+      p.style.animationDelay = `${delay}s`;
       p.style.setProperty('--dust-dur', `${duration}s`);
       p.style.setProperty('--p-scatter-x', `${scatterX}px`);
       p.style.setProperty('--p-scatter-y', `${scatterY}px`);
+      p.style.setProperty('--p-mid-x', `${midCurveX}px`);
+      p.style.setProperty('--p-mid-y', `${midCurveY}px`);
       p.style.setProperty('--p-dx-end', `${pEndX}px`);
       p.style.setProperty('--p-dy-end', `${pEndY}px`);
 
       document.body.appendChild(p);
-      setTimeout(() => p.remove(), duration * 1000 + 100);
+      setTimeout(() => p.remove(), (duration + delay) * 1000 + 150);
     }
 
     setDisintegrateStyle({
-      '--target-dx': `${Math.round(dx)}px`,
-      '--target-dy': `${Math.round(dy)}px`,
+      '--target-dx': `${Math.round(dx * 0.9)}px`,
+      '--target-dy': `${Math.round(dy * 0.9)}px`,
     });
     setIsDeleting(true);
 
-    // Remove from note store after 2.3s (1.5s full in-place disintegration + 0.8s smooth flight into dustbin)
+    // Remove from note store after 2.6s (1.4s in-place disintegration + 1.2s smooth fluid flight into dustbin)
     setTimeout(() => {
       onDelete(note.id);
-    }, 2300);
+    }, 2600);
   }
 
   return (
@@ -503,29 +784,45 @@ function Note({
           className="note-text note-render"
           aria-hidden="true"
         >
-          {chars.map((ch) => (
-            <span
-              key={ch.id}
-              className={ch.fresh ? 'ch ch-new' : 'ch'}
-              style={ch.color ? { color: ch.color } : undefined}
-            >
-              {ch.c}
-            </span>
-          ))}
+          {chars.map((ch, idx) => {
+            const isPreviewHighlighted =
+              activeHighlightRange &&
+              idx >= activeHighlightRange.start &&
+              idx <= activeHighlightRange.end;
+
+            return (
+              <span
+                key={ch.id}
+                data-char-index={idx}
+                className={`note-char-span ${ch.fresh ? 'ch ch-new' : 'ch'} ${isPreviewHighlighted ? 'is-preview-highlight' : ''}`}
+                style={{
+                  ...(ch.color ? { color: ch.color } : {}),
+                  ...(isPreviewHighlighted ? { backgroundColor: `${highlighterColor}77`, borderRadius: '3px' } : {}),
+                }}
+              >
+                {ch.c}
+              </span>
+            );
+          })}
           {'\u200b'}
         </div>
 
         {/* layer 2 (on top): real textarea, transparent text, handles all input */}
         <textarea
           ref={textareaRef}
-          className="note-text note-input"
-          placeholder="Write something..."
+          className={`note-text note-input ${isHighlighterActive ? (highlighterMode === 'eraser' ? 'is-eraser-mode' : 'is-highlighter-mode') : ''}`}
+          spellCheck="false"
+          autoCorrect="off"
+          autoCapitalize="off"
           aria-label="Note text"
           value={note.text}
           maxLength={maxCharLimit}
           autoFocus={autoFocus}
           onChange={handleTextChange}
           onPointerDown={handleTextareaPointerDown}
+          onPointerMove={isHighlighterActive ? handleHighlighterPointerMove : undefined}
+          onPointerUp={isHighlighterActive ? handleHighlighterPointerUp : undefined}
+          onPointerCancel={isHighlighterActive ? handleHighlighterPointerUp : undefined}
           onDoubleClick={handleTextareaDoubleClick}
           onFocus={() => {
             setIsFocused(true);
@@ -548,6 +845,22 @@ function Note({
           <span className="note-typing-ring" />
           <span className="note-typing-dot" />
         </div>
+      )}
+
+      {/* Clear highlights button if note has active highlights */}
+      {note.highlights && note.highlights.length > 0 && isSelected && (
+        <button
+          type="button"
+          className="note-clear-highlights-btn"
+          title="Eraser: Clear all highlights on this note"
+          data-html2canvas-ignore="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onClearHighlights) onClearHighlights(note.id);
+          }}
+        >
+          🧹 Clear Highlight
+        </button>
       )}
 
       <button
