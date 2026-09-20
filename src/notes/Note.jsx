@@ -2,6 +2,8 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { useCharTags } from './useCharTags';
 import { annotate } from 'rough-notation';
 import { dustDelete } from './dustDelete';
+import { useGlyphDraw, loadGlyphFont } from './glyphDraw';
+import { getFontGlyphUrl } from './fonts';
 
 // Classes to style: .note  .note-paper  .note-text  .note-render  .note-input
 //                   .ch  .ch-new  .note-delete  .is-dragging
@@ -33,7 +35,6 @@ function Note({
   onRemoveHighlight,
   onClearHighlights,
 }) {
-  if (!config) return null;
   const [isFocused, setIsFocused] = useState(false);
   const [isSelected, setIsSelected] = useState(false);
   const [isHoldMoveActive, setIsHoldMoveActive] = useState(false); // 1.5s hold-to-move only mode
@@ -49,7 +50,18 @@ function Note({
   const rotateDrag = useRef(null);
   const rootRef = useRef(null);
   const renderRef = useRef(null); // the mirror layer that shows animated characters
+  const layerRef = useRef(null); // SVG overlay for Apple-like typography glyph drawing
   const chars = useCharTags(note.text, note.textColor || '#3a3a3a');
+  const glyphUrl = getFontGlyphUrl(note.fontFamily);
+
+  // Pre-load glyph font when note is opened/rendered
+  useEffect(() => {
+    if (glyphUrl) {
+      loadGlyphFont(glyphUrl).catch(() => {});
+    }
+  }, [glyphUrl]);
+
+  useGlyphDraw(renderRef, layerRef, chars, glyphUrl);
 
   // Keep isHoldMoveActiveRef in sync with state
   useEffect(() => {
@@ -743,6 +755,8 @@ function Note({
     });
   }
 
+  if (!config) return null;
+
   return (
     <div
       ref={rootRef}
@@ -856,6 +870,9 @@ function Note({
           })}
           {'\u200b'}
         </div>
+
+        {/* Apple-like typography glyph drawing SVG layer */}
+        <svg ref={layerRef} className="glyph-layer" aria-hidden="true" />
 
         {/* layer 2 (on top): real textarea, transparent text, handles all input */}
         <textarea

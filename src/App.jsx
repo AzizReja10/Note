@@ -4,6 +4,7 @@ import Header from './pages/Header';
 import { useNotes } from './notes/useNotes';
 import { localStorageAdapter } from './notes/storage';
 import { toPng } from 'html-to-image';
+import { NOTE_FONTS } from './notes/fonts';
 
 const App = () => {
   const [isFolderOpen, setIsFolderOpen] = useState(false);
@@ -647,57 +648,7 @@ function SettingsBottomPanel({
   );
 }
 
-const FONT_OPTIONS = [
-  {
-    id: 'patrick-hand',
-    label: 'Patrick Hand',
-    category: 'Handwriting',
-    fontFamily: "'Patrick Hand', cursive, sans-serif",
-    previewText: 'Handwritten notes',
-  },
-  {
-    id: 'open-sans',
-    label: 'Open Sans',
-    category: 'Clean Sans',
-    fontFamily: "'Open Sans Variable', sans-serif",
-    previewText: 'Modern & Clean',
-  },
-  {
-    id: 'caveat',
-    label: 'Caveat',
-    category: 'Casual Script',
-    fontFamily: "'Caveat', cursive",
-    previewText: 'Playful cursive',
-  },
-  {
-    id: 'kalam',
-    label: 'Kalam',
-    category: 'Marker Pen',
-    fontFamily: "'Kalam', cursive",
-    previewText: 'Felt tip pen',
-  },
-  {
-    id: 'dancing-script',
-    label: 'Dancing Script',
-    category: 'Calligraphy',
-    fontFamily: "'Dancing Script', cursive",
-    previewText: 'Elegant flow',
-  },
-  {
-    id: 'shadows',
-    label: 'Shadows Into Light',
-    category: 'Dainty Neat',
-    fontFamily: "'Shadows Into Light', cursive",
-    previewText: 'Delicate script',
-  },
-  {
-    id: 'monospace',
-    label: 'Typewriter Mono',
-    category: 'Monospace',
-    fontFamily: "'Courier New', Courier, monospace",
-    previewText: 'Retro typewriter',
-  },
-];
+const FONT_OPTIONS = NOTE_FONTS;
 
 function FontCustomizerPanel({
   isOpen,
