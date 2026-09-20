@@ -11,10 +11,10 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import { layoutScript, caretPos, hitTest, unitToIndex, indexToUnit } from './scriptLayout';
 
 /* ---- tuning knobs ---- */
-const PEN_SPEED = 90;        // px per second the pen travels (lower = slower, more graceful)
-const MIN_MS = 220;          // a glyph never draws faster than this...
-const MAX_MS = 600;          // ...or slower than this
-const MAX_QUEUE_MS = 700;    // if the pen falls this far behind your typing it speeds up
+const PEN_SPEED = 125;       // px per second the pen travels (higher = faster, snappier)
+const MIN_MS = 170;          // a glyph never draws faster than this...
+const MAX_MS = 450;          // ...or slower than this
+const MAX_QUEUE_MS = 550;    // if the pen falls this far behind your typing it speeds up
 const MAX_BURST = 30;        // pasting more than this many characters at once: no animation
 const EASING = 'cubic-bezier(.35, .1, .3, 1)';
 
@@ -121,6 +121,9 @@ export default function ScriptText({
   caret = null,
   focused = false,
   onCaret,
+  onDoubleClick,
+  onPointerDown,
+  onPointerUp,
 }) {
   const pack = useScriptFont(packUrl);
   const svgRef = useRef(null);
@@ -185,7 +188,15 @@ export default function ScriptText({
   }
 
   return (
-    <svg ref={svgRef} className="script-layer" aria-hidden="true" onClick={handleClick}>
+    <svg
+      ref={svgRef}
+      className="script-layer"
+      aria-hidden="true"
+      onClick={handleClick}
+      onDoubleClick={onDoubleClick}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+    >
       {layout && layout.items.map(it => {
         const glyph = pack.glyphs[it.c];
         if (!glyph) return null;                                   // space, newline, unsupported character

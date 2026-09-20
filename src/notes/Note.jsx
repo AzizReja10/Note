@@ -51,6 +51,8 @@ function Note({
   const rootRef = useRef(null);
   const renderRef = useRef(null); // the mirror layer that shows animated characters
   const textareaRef = useRef(null);
+  const lastTextTapTime = useRef(0);
+  const lastTextTransformToggleTime = useRef(0);
   const [sel, setSel] = useState({ start: 0, end: 0, focused: false });
   const chars = useCharTags(note.text, note.textColor || '#3a3a3a');
   const scriptUrl = getFontScriptUrl(note.fontFamily);
@@ -163,7 +165,7 @@ function Note({
 
   function handleNoteDoubleClick(e) {
     cancelHoldTimer();
-    if (e.target.closest('textarea, button, .text-drag-handle, .text-control-handle, .note-control-handle')) return;
+    if (e.target.closest('textarea, button, .script-layer, .text-drag-handle, .text-control-handle, .note-control-handle')) return;
     e.stopPropagation();
     e.preventDefault();
     onFront(note.id);
@@ -425,7 +427,7 @@ function Note({
     highlightStartCharIndex.current = null;
   };
 
-  // Double-click specifically on textarea: toggles textarea rotate/resize without selecting text
+  // Double-click or double-tap specifically on text/textarea: toggles textarea rotate/resize
   function handleTextareaPointerDown(e) {
     if (isHighlighterActive) {
       handleHighlighterPointerDown(e);
@@ -434,6 +436,15 @@ function Note({
     onFront(note.id);
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
+
+    // Double tap detector (for touch devices / trackpad where dblclick event may not fire reliably)
+    const now = Date.now();
+    if (now - lastTextTapTime.current < 320) {
+      lastTextTapTime.current = 0;
+      handleTextareaDoubleClick(e);
+      return;
+    }
+    lastTextTapTime.current = now;
 
     // If moving mode is already active, allow moving/dragging note immediately
     if (isHoldMoveActiveRef.current) {
@@ -479,6 +490,12 @@ function Note({
     if (isHighlighterActive) return;
     e.preventDefault();
     e.stopPropagation();
+
+    // Debounce guard: prevents double-firing when both pointer-tap detector and native dblclick fire within ~400ms
+    const now = Date.now();
+    if (now - lastTextTransformToggleTime.current < 400) return;
+    lastTextTransformToggleTime.current = now;
+
     // Remove browser default double-click text highlight
     if (window.getSelection) {
       window.getSelection().removeAllRanges();
@@ -854,6 +871,9 @@ function Note({
                 setSel({ start: u, end: u, focused: true });
               }
             }}
+            onDoubleClick={handleTextareaDoubleClick}
+            onPointerDown={handleTextareaPointerDown}
+            onPointerUp={handleTextareaPointerUp}
           />
         ) : (
           <div
@@ -925,30 +945,6 @@ function Note({
           }}
         />
       </div>
-      )}
-
-      {/* Animated TYPING indicator badge that appears green when focus is in textarea / in writing mode */}
-      {!config.isSticker && isFocused && (
-        <div
-          className="note-typing-badge"
-          title="Typing active"
-          data-html2canvas-ignore="true"
-        >
-          <span className="note-typing-badge-dot" />
-          <span className="note-typing-badge-text">
-            <span className="t-letter t-1">T</span>
-            <span className="t-letter t-2">Y</span>
-            <span className="t-letter t-3">P</span>
-            <span className="t-letter t-4">I</span>
-            <span className="t-letter t-5">N</span>
-            <span className="t-letter t-6">G</span>
-          </span>
-          <span className="note-typing-dots">
-            <span className="t-dot t-dot-1">.</span>
-            <span className="t-dot t-dot-2">.</span>
-            <span className="t-dot t-dot-3">.</span>
-          </span>
-        </div>
       )}
 
       {/* Move mode indicator badge shown when user holds note/textarea for >= 1.5s */}
