@@ -36,6 +36,10 @@ function Note({
   if (!config) return null;
   const [isFocused, setIsFocused] = useState(false);
   const [isSelected, setIsSelected] = useState(false);
+  const [isHoldMoveActive, setIsHoldMoveActive] = useState(false); // 1.5s hold-to-move only mode
+  const holdTimerRef = useRef(null);
+  const holdStartPos = useRef(null);
+  const isHoldMoveActiveRef = useRef(false);
   const drag = useRef(null); // { offX, offY } while dragging note
   const textDrag = useRef(null); // { startX, startY, initialOffsetX, initialOffsetY } while dragging textarea
   const textResizeDrag = useRef(null);
@@ -47,11 +51,65 @@ function Note({
   const renderRef = useRef(null); // the mirror layer that shows animated characters
   const chars = useCharTags(note.text, note.textColor || '#3a3a3a');
 
+  // Keep isHoldMoveActiveRef in sync with state
+  useEffect(() => {
+    isHoldMoveActiveRef.current = isHoldMoveActive;
+  }, [isHoldMoveActive]);
+
+  // Clean up hold timer on unmount
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Cancel hold timer helper
+  const cancelHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    holdStartPos.current = null;
+  };
+
+  // Start hold timer on pointerdown (note body or textarea)
+  const startHoldTimer = (e, clientX, clientY, targetEl, pointerId) => {
+    cancelHoldTimer();
+    holdStartPos.current = { x: clientX, y: clientY };
+
+    holdTimerRef.current = setTimeout(() => {
+      // 1.5s held without moving away: activate move-only mode
+      setIsHoldMoveActive(true);
+      isHoldMoveActiveRef.current = true;
+      if (navigator.vibrate) navigator.vibrate(40);
+
+      // Blur textarea if currently focused
+      if (textareaRef.current) {
+        textareaRef.current.blur();
+      }
+
+      // Initialize dragging immediately so the user can continue moving
+      drag.current = { offX: clientX - note.x, offY: clientY - note.y };
+      try {
+        if (targetEl && targetEl.setPointerCapture) {
+          targetEl.setPointerCapture(pointerId);
+        }
+      } catch (err) {
+        // ignore capture errors if already released
+      }
+      rootRef.current?.classList.add('is-dragging');
+      holdTimerRef.current = null;
+    }, 1500);
+  };
+
   // Unselect when clicking outside this note
   useEffect(() => {
     function handleGlobalPointerDown(e) {
       if (rootRef.current && !rootRef.current.contains(e.target)) {
         setIsSelected(false);
+        setIsHoldMoveActive(false);
       }
     }
     window.addEventListener('pointerdown', handleGlobalPointerDown);
@@ -59,18 +117,29 @@ function Note({
   }, []);
 
   function handleNotePointerDown(e) {
-    // If clicking inside textarea, buttons, or controls, do not trigger note drag or note transform
-    if (e.target.closest('textarea, button, .text-drag-handle, .text-control-handle, .note-control-handle')) return;
+    // If clicking inside controls, do not trigger note drag
+    if (e.target.closest('.text-control-handle, .note-control-handle, .note-delete, .note-clear-highlights-btn')) return;
 
     onFront(note.id);
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
+
+    // If clicking directly on textarea, start hold timer but let textarea handle typing/focus
+    if (e.target.closest('textarea')) {
+      startHoldTimer(e, e.clientX, e.clientY, e.target, e.pointerId);
+      return;
+    }
+
+    // On note paper / sticker / container:
+    // Start hold timer (to unlock move badge / move mode indicator) and initiate drag
+    startHoldTimer(e, e.clientX, e.clientY, e.currentTarget, e.pointerId);
     drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
     e.currentTarget.setPointerCapture(e.pointerId);
     rootRef.current.classList.add('is-dragging');
   }
 
   function handleNoteDoubleClick(e) {
+    cancelHoldTimer();
     if (e.target.closest('textarea, button, .text-drag-handle, .text-control-handle, .note-control-handle')) return;
     e.stopPropagation();
     e.preventDefault();
@@ -342,9 +411,37 @@ function Note({
     onFront(note.id);
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
+    // Start hold timer on textarea so holding for 1.5s triggers move mode
+    startHoldTimer(e, e.clientX, e.clientY, e.currentTarget, e.pointerId);
+  }
+
+  function handleTextareaPointerMove(e) {
+    if (isHighlighterActive) {
+      handleHighlighterPointerMove(e);
+      return;
+    }
+    if (holdTimerRef.current && holdStartPos.current) {
+      const dist = Math.hypot(e.clientX - holdStartPos.current.x, e.clientY - holdStartPos.current.y);
+      if (dist > 8) {
+        cancelHoldTimer();
+      }
+    }
+    if (drag.current) {
+      handlePointerMove(e);
+    }
+  }
+
+  function handleTextareaPointerUp(e) {
+    if (isHighlighterActive) {
+      handleHighlighterPointerUp(e);
+      return;
+    }
+    cancelHoldTimer();
+    endDrag();
   }
 
   function handleTextareaDoubleClick(e) {
+    cancelHoldTimer();
     if (isHighlighterActive) return;
     e.preventDefault();
     e.stopPropagation();
@@ -361,6 +458,12 @@ function Note({
   }
 
   function handlePointerMove(e) {
+    if (holdTimerRef.current && holdStartPos.current) {
+      const dist = Math.hypot(e.clientX - holdStartPos.current.x, e.clientY - holdStartPos.current.y);
+      if (dist > 8) {
+        cancelHoldTimer();
+      }
+    }
     if (!drag.current) return;
     const rawX = e.clientX - drag.current.offX;
     const rawY = e.clientY - drag.current.offY;
@@ -374,8 +477,10 @@ function Note({
   }
 
   function endDrag() {
+    cancelHoldTimer();
     drag.current = null;
     rootRef.current?.classList.remove('is-dragging');
+    setIsHoldMoveActive(false);
   }
 
   // Dragging the textarea position directly within the note
@@ -617,7 +722,7 @@ function Note({
   return (
     <div
       ref={rootRef}
-      className={`note ${isSelected ? 'is-selected' : ''} ${isFocused ? 'is-focused' : ''} ${isNoteTransformActive ? 'is-transforming' : ''}`}
+      className={`note ${isSelected ? 'is-selected' : ''} ${isFocused ? 'is-focused' : ''} ${isNoteTransformActive ? 'is-transforming' : ''} ${isHoldMoveActive ? 'is-hold-move-active' : ''}`}
       data-type={note.type}
       style={{
         left: renderLeft,
@@ -742,9 +847,9 @@ function Note({
           autoFocus={autoFocus}
           onChange={handleTextChange}
           onPointerDown={handleTextareaPointerDown}
-          onPointerMove={isHighlighterActive ? handleHighlighterPointerMove : undefined}
-          onPointerUp={isHighlighterActive ? handleHighlighterPointerUp : undefined}
-          onPointerCancel={isHighlighterActive ? handleHighlighterPointerUp : undefined}
+          onPointerMove={handleTextareaPointerMove}
+          onPointerUp={handleTextareaPointerUp}
+          onPointerCancel={handleTextareaPointerUp}
           onDoubleClick={handleTextareaDoubleClick}
           onFocus={() => {
             setIsFocused(true);
@@ -779,6 +884,18 @@ function Note({
             <span className="t-dot t-dot-2">.</span>
             <span className="t-dot t-dot-3">.</span>
           </span>
+        </div>
+      )}
+
+      {/* Move mode indicator badge shown when user holds note/textarea for >= 1.5s */}
+      {isHoldMoveActive && (
+        <div
+          className="note-move-badge"
+          title="Move Mode Active: Drag note to reposition"
+          data-html2canvas-ignore="true"
+        >
+          <span className="note-move-badge-icon">✥</span>
+          <span className="note-move-badge-text">Moving Note</span>
         </div>
       )}
 

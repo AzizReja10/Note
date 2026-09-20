@@ -468,6 +468,63 @@
   }
 }
 
+/* 1.5s Hold-to-Move only badge & note active styling */
+.note.is-hold-move-active {
+  cursor: move !important;
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4), 0 8px 10px -6px rgba(59, 130, 246, 0.3) !important;
+  outline: 2px dashed #3b82f6;
+  outline-offset: 4px;
+}
+
+.note.is-hold-move-active textarea {
+  cursor: move !important;
+  pointer-events: none;
+}
+
+.note-move-badge {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: rgba(37, 99, 235, 0.92);
+  border: 1px solid rgba(147, 197, 253, 0.5);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35), 0 0 0 2px rgba(59, 130, 246, 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  pointer-events: none;
+  z-index: 50;
+  user-select: none;
+  animation: badgePop 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.note-move-badge-icon {
+  font-size: 13px;
+  animation: moveIconPulse 1.2s ease-in-out infinite;
+}
+
+.note-move-badge-text {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@keyframes moveIconPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+}
+
 .note-delete {
   position: absolute;
   top: -10px;
