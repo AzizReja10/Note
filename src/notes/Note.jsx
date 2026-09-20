@@ -2,8 +2,8 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { useCharTags } from './useCharTags';
 import { annotate } from 'rough-notation';
 import { dustDelete } from './dustDelete';
-import { useGlyphDraw, loadGlyphFont } from './glyphDraw';
-import { getFontGlyphUrl } from './fonts';
+import ScriptText, { loadScriptFont } from './ScriptText';
+import { getFontScriptUrl } from './fonts';
 
 // Classes to style: .note  .note-paper  .note-text  .note-render  .note-input
 //                   .ch  .ch-new  .note-delete  .is-dragging
@@ -50,18 +50,17 @@ function Note({
   const rotateDrag = useRef(null);
   const rootRef = useRef(null);
   const renderRef = useRef(null); // the mirror layer that shows animated characters
-  const layerRef = useRef(null); // SVG overlay for Apple-like typography glyph drawing
+  const textareaRef = useRef(null);
+  const [sel, setSel] = useState({ start: 0, end: 0, focused: false });
   const chars = useCharTags(note.text, note.textColor || '#3a3a3a');
-  const glyphUrl = getFontGlyphUrl(note.fontFamily);
+  const scriptUrl = getFontScriptUrl(note.fontFamily);
 
-  // Pre-load glyph font when note is opened/rendered
+  // Pre-load script font when note is opened/rendered
   useEffect(() => {
-    if (glyphUrl) {
-      loadGlyphFont(glyphUrl).catch(() => {});
+    if (scriptUrl) {
+      loadScriptFont(scriptUrl).catch(() => {});
     }
-  }, [glyphUrl]);
-
-  useGlyphDraw(renderRef, layerRef, chars, glyphUrl);
+  }, [scriptUrl]);
 
   // Keep isHoldMoveActiveRef in sync with state
   useEffect(() => {
@@ -148,8 +147,8 @@ function Note({
       return;
     }
 
-    // If clicking directly on textarea, start hold timer but let textarea handle typing/focus
-    if (e.target.closest('textarea')) {
+    // If clicking directly on textarea or script-layer, start hold timer but let typing/caret handle it
+    if (e.target.closest('textarea, button, .script-layer')) {
       startHoldTimer(e, e.clientX, e.clientY, e.target, e.pointerId);
       return;
     }
@@ -711,8 +710,6 @@ function Note({
     }
   }
 
-  const textareaRef = useRef(null);
-
   // Dynamic max characters calculation based on actual width & height of the text area
   // Font is Patrick Hand 22px / line-height 1.5 (33px per line).
   // Characters average ~9.5px in width.
@@ -841,43 +838,58 @@ function Note({
           </>
         )}
 
-        {/* layer 1 (visible): one <span> per character, new ones animate, individual colors preserved */}
-        <div
-          ref={renderRef}
-          className="note-text note-render"
-          style={note.fontFamily ? { fontFamily: note.fontFamily } : undefined}
-          aria-hidden="true"
-        >
-          {chars.map((ch, idx) => {
-            const isPreviewHighlighted =
-              activeHighlightRange &&
-              idx >= activeHighlightRange.start &&
-              idx <= activeHighlightRange.end;
+        {/* layer 1 (visible): ScriptText (continuous cursive single-stroke handwriting) or note-render */}
+        {scriptUrl ? (
+          <ScriptText
+            chars={chars}
+            packUrl={scriptUrl}
+            lineHeight={config.lineHeight ?? 33}
+            color={note.textColor || '#3a3a3a'}
+            caret={sel.start === sel.end ? sel.start : null}
+            focused={sel.focused}
+            onCaret={(u) => {
+              if (textareaRef.current) {
+                textareaRef.current.focus();
+                textareaRef.current.setSelectionRange(u, u);
+                setSel({ start: u, end: u, focused: true });
+              }
+            }}
+          />
+        ) : (
+          <div
+            ref={renderRef}
+            className="note-text note-render"
+            style={note.fontFamily ? { fontFamily: note.fontFamily } : undefined}
+            aria-hidden="true"
+          >
+            {chars.map((ch, idx) => {
+              const isPreviewHighlighted =
+                activeHighlightRange &&
+                idx >= activeHighlightRange.start &&
+                idx <= activeHighlightRange.end;
 
-            return (
-              <span
-                key={ch.id}
-                data-char-index={idx}
-                className={`note-char-span ${ch.fresh ? 'ch ch-new' : 'ch'} ${isPreviewHighlighted ? 'is-preview-highlight' : ''}`}
-                style={{
-                  ...(ch.color ? { color: ch.color } : {}),
-                  ...(isPreviewHighlighted ? { backgroundColor: `${highlighterColor}77`, borderRadius: '3px' } : {}),
-                }}
-              >
-                {ch.c}
-              </span>
-            );
-          })}
-          {'\u200b'}
-        </div>
-
-        {/* Apple-like typography glyph drawing SVG layer */}
-        <svg ref={layerRef} className="glyph-layer" aria-hidden="true" />
+              return (
+                <span
+                  key={ch.id}
+                  data-char-index={idx}
+                  className={`note-char-span ${ch.fresh ? 'ch ch-new' : 'ch'} ${isPreviewHighlighted ? 'is-preview-highlight' : ''}`}
+                  style={{
+                    ...(ch.color ? { color: ch.color } : {}),
+                    ...(isPreviewHighlighted ? { backgroundColor: `${highlighterColor}77`, borderRadius: '3px' } : {}),
+                  }}
+                >
+                  {ch.c}
+                </span>
+              );
+            })}
+            {'\u200b'}
+          </div>
+        )}
 
         {/* layer 2 (on top): real textarea, transparent text, handles all input */}
         <textarea
           ref={textareaRef}
-          className={`note-text note-input ${isHighlighterActive ? (highlighterMode === 'eraser' ? 'is-eraser-mode' : 'is-highlighter-mode') : ''}`}
+          className={`note-text note-input ${scriptUrl ? 'is-script' : ''} ${isHighlighterActive ? (highlighterMode === 'eraser' ? 'is-eraser-mode' : 'is-highlighter-mode') : ''}`}
           style={note.fontFamily ? { fontFamily: note.fontFamily } : undefined}
           spellCheck="false"
           autoCorrect="off"
@@ -887,6 +899,13 @@ function Note({
           maxLength={maxCharLimit}
           autoFocus={autoFocus}
           onChange={handleTextChange}
+          onSelect={(e) => {
+            setSel((s) => ({
+              ...s,
+              start: e.target.selectionStart,
+              end: e.target.selectionEnd,
+            }));
+          }}
           onPointerDown={handleTextareaPointerDown}
           onPointerMove={handleTextareaPointerMove}
           onPointerUp={handleTextareaPointerUp}
@@ -894,9 +913,13 @@ function Note({
           onDoubleClick={handleTextareaDoubleClick}
           onFocus={() => {
             setIsFocused(true);
+            setSel((s) => ({ ...s, focused: true }));
             onFront(note.id);
           }}
-          onBlur={() => setIsFocused(false)}
+          onBlur={() => {
+            setIsFocused(false);
+            setSel((s) => ({ ...s, focused: false }));
+          }}
           onScroll={(e) => {
             if (renderRef.current) renderRef.current.scrollTop = e.target.scrollTop;
           }}

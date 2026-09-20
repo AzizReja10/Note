@@ -1,13 +1,28 @@
-import patrickUrl from '@fontsource/patrick-hand/files/patrick-hand-latin-400-normal.woff?url';
-
 export const NOTE_FONTS = [
+  {
+    id: 'script',
+    label: 'Script',
+    desc: 'Handwritten',
+    category: 'Handwritten',
+    fontFamily: "'Patrick Hand', cursive",
+    script: '/script-satisfy.json',
+    previewText: 'Continuous cursive',
+  },
+  {
+    id: 'script-parisienne',
+    label: 'Parisienne',
+    desc: 'Calligraphy',
+    category: 'Calligraphy',
+    fontFamily: "'Dancing Script', cursive",
+    script: '/script-parisienne.json',
+    previewText: 'Parisian cursive',
+  },
   {
     id: 'patrick-hand',
     label: 'Patrick Hand',
     category: 'Handwriting',
     fontFamily: "'Patrick Hand', cursive, sans-serif",
     previewText: 'Handwritten notes',
-    glyphUrl: patrickUrl,
   },
   {
     id: 'open-sans',
@@ -53,13 +68,15 @@ export const NOTE_FONTS = [
   },
 ];
 
-export function getFontGlyphUrl(fontFamily) {
-  if (!fontFamily) return patrickUrl; // Default font in app is Patrick Hand
+export function getFontScriptUrl(fontFamily) {
+  // If font is undefined / empty or explicitly script font, default to '/script-satisfy.json'
+  if (!fontFamily) return '/script-satisfy.json';
   const match = NOTE_FONTS.find(
     (f) =>
       f.fontFamily === fontFamily ||
-      fontFamily.toLowerCase().includes(f.id) ||
-      (f.id === 'patrick-hand' && fontFamily.toLowerCase().includes('patrick'))
+      f.id === fontFamily ||
+      (f.id === 'script' && fontFamily.includes('Patrick Hand')) ||
+      (f.id === 'script-parisienne' && fontFamily.includes('Parisienne'))
   );
-  return match?.glyphUrl;
+  return match?.script;
 }

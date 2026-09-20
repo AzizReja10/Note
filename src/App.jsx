@@ -5,6 +5,11 @@ import { useNotes } from './notes/useNotes';
 import { localStorageAdapter } from './notes/storage';
 import { toPng } from 'html-to-image';
 import { NOTE_FONTS } from './notes/fonts';
+import { loadScriptFont } from './notes/ScriptText';
+
+// Preload handwriting script fonts early on app initialization
+loadScriptFont('/script-satisfy.json').catch(() => {});
+loadScriptFont('/script-parisienne.json').catch(() => {});
 
 const App = () => {
   const [isFolderOpen, setIsFolderOpen] = useState(false);
