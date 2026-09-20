@@ -126,6 +126,16 @@ function Note({
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
 
+    // If moving mode is already active, allow moving/dragging immediately on pointer down
+    if (isHoldMoveActiveRef.current) {
+      drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      rootRef.current?.classList.add('is-dragging');
+      return;
+    }
+
     // If clicking directly on textarea, start hold timer but let textarea handle typing/focus
     if (e.target.closest('textarea')) {
       startHoldTimer(e, e.clientX, e.clientY, e.target, e.pointerId);
@@ -413,6 +423,17 @@ function Note({
     onFront(note.id);
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
+
+    // If moving mode is already active, allow moving/dragging note immediately
+    if (isHoldMoveActiveRef.current) {
+      drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      rootRef.current?.classList.add('is-dragging');
+      return;
+    }
+
     // Start hold timer on textarea so holding for 1s triggers move/drag mode
     startHoldTimer(e, e.clientX, e.clientY, e.currentTarget, e.pointerId);
   }
@@ -482,7 +503,8 @@ function Note({
     cancelHoldTimer();
     drag.current = null;
     rootRef.current?.classList.remove('is-dragging');
-    setIsHoldMoveActive(false);
+    // Note: isHoldMoveActive stays true so the "Moving Note" mode and badge remain visible even after release/hold off,
+    // and only disappears when clicking outside the note (handled by global pointerdown).
   }
 
   // Dragging the textarea position directly within the note
