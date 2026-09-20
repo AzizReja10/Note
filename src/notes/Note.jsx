@@ -494,7 +494,8 @@ function Note({
     const currentDist = Math.hypot(e.clientX - centerX, e.clientY - centerY);
     const scale = currentDist / (initialDist || 1);
     const nextW = Math.round(initialWidth * scale);
-    const clampedW = Math.max(140, Math.min(900, nextW));
+    const minW = config.isSticker ? 30 : 140;
+    const clampedW = Math.max(minW, Math.min(900, nextW));
     onResize(note.id, clampedW);
   }
 
@@ -634,9 +635,10 @@ function Note({
     >
       <img className="note-paper" src={config.src} alt="" draggable={false} />
 
-      {/* Textarea positioning wrapper */}
-      <div
-        ref={textContainerRef}
+      {/* Textarea positioning wrapper (only rendered for notes, disabled for stickers) */}
+      {!config.isSticker && (
+        <div
+          ref={textContainerRef}
         className={`note-text-container ${isPreviewActive ? 'is-preview-active' : ''} ${isTextTransformActive ? 'is-text-transforming' : ''}`}
         style={{
           transform: customTextTransform,
@@ -754,9 +756,10 @@ function Note({
           }}
         />
       </div>
+      )}
 
       {/* Animated TYPING indicator badge that appears green when focus is in textarea / in writing mode */}
-      {isFocused && (
+      {!config.isSticker && isFocused && (
         <div
           className="note-typing-badge"
           title="Typing active"

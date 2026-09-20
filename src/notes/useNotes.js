@@ -118,7 +118,7 @@ export function useNotes(storage = localStorageAdapter) {
 
   const resizeNote = useCallback(
     (id, width) => {
-      const clampedWidth = Math.max(140, Math.min(1000, Math.round(width)));
+      const clampedWidth = Math.max(30, Math.min(1000, Math.round(width)));
       patch(id, { width: clampedWidth });
     },
     [patch]

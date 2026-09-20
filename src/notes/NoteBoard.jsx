@@ -84,10 +84,11 @@ const NoteBoard = ({
     });
     setLoadedImages(initialLoaded);
 
-    // Give a brief smooth breathing moment for network/online loads
+    // Give 1.5s loading bar for the notes collection modal
+    setIsFolderReady(false);
     const timer = setTimeout(() => {
       setIsFolderReady(true);
-    }, 400);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [isFolderOpen, types]);
@@ -102,10 +103,7 @@ const NoteBoard = ({
     return true;
   });
 
-  const allVisibleLoaded =
-    isFolderReady &&
-    visibleEntries.length > 0 &&
-    visibleEntries.filter(([type]) => loadedImages[type]).length >= Math.min(visibleEntries.length, 3);
+  const allVisibleLoaded = isFolderReady;
 
   return (
     <>
@@ -241,7 +239,7 @@ const NoteBoard = ({
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center z-20">
                         <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/80 text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md">
-                          Add Note
+                          {cfg.isSticker ? 'Add Sticker' : 'Add Note'}
                         </span>
                       </div>
                     </div>
