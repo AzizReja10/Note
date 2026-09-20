@@ -1,6 +1,7 @@
 /* =====================================================================
    ScriptText.jsx: Apple-style handwriting. Text is laid out in a single-stroke cursive font
    and every new character is DRAWN by a pen: one continuous line, letters connected.
+   Emoji (and any character the stroke font lacks) are shown as real text and pop in.
 
    It only DISPLAYS the text. Your real <textarea> still handles typing, undo, paste and the
    keyboard; it just has invisible text. Click on the drawn text to place the caret.
@@ -8,17 +9,27 @@
    Font packs come from tools/build_script_font.py (Vara stroke fonts, MIT).
    ===================================================================== */
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { layoutScript, caretPos, hitTest, unitToIndex, indexToUnit } from './scriptLayout';
+import {
+  layoutScript, caretPos, hitTest, unitToIndex, indexToUnit, clusterChars, isEmoji,
+} from './scriptLayout';
 
 /* ---- tuning knobs ---- */
-const PEN_SPEED = 125;       // px per second the pen travels (higher = faster, snappier)
-const MIN_MS = 170;          // a glyph never draws faster than this...
-const MAX_MS = 450;          // ...or slower than this
-const MAX_QUEUE_MS = 550;    // if the pen falls this far behind your typing it speeds up
+const PEN_SPEED = 90;        // px per second the pen travels (lower = slower, more graceful)
+const MIN_MS = 220;          // a glyph never draws faster than this...
+const MAX_MS = 600;          // ...or slower than this
+const MAX_QUEUE_MS = 700;    // if the pen falls this far behind your typing it speeds up
 const MAX_BURST = 30;        // pasting more than this many characters at once: no animation
 const EASING = 'cubic-bezier(.35, .1, .3, 1)';
+const POP_MS = 260;          // emoji pop-in time
+const EMOJI_EM = 1.05;       // emoji size relative to the script's ascender height
+
+// characters the stroke font can't draw fall back to this stack (emoji come from the system emoji font)
+const FALLBACK_FONT =
+  "'Patrick Hand', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+const isReduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---- font pack loading (cached; call loadScriptFont(url) early to avoid a first-letter delay) ---- */
 const packs = new Map();
@@ -40,7 +51,24 @@ function useScriptFont(url) {
   return pack;
 }
 
-/* ---- one character: strokes drawn in order, queued behind the previous character ---- */
+/* ---- measuring fallback characters (emoji etc.) with a canvas ---- */
+function makeMeasure(family) {
+  const cache = new Map();
+  let ctx = null;
+  return (c, size) => {
+    const key = `${size}|${c}`;
+    let w = cache.get(key);
+    if (w == null) {
+      ctx = ctx || document.createElement('canvas').getContext('2d');
+      if (ctx) { ctx.font = `${size}px ${family}`; w = ctx.measureText(c).width; }
+      else w = size;
+      cache.set(key, w);
+    }
+    return w;
+  };
+}
+
+/* ---- one stroke character: strokes drawn in order, queued behind the previous character ---- */
 const Glyph = memo(function Glyph({ glyph, x, y, scale, strokePx, color, animate, pen }) {
   const ref = useRef(null);
   const started = useRef(false);
@@ -99,6 +127,52 @@ const Glyph = memo(function Glyph({ glyph, x, y, scale, strokePx, color, animate
   );
 });
 
+/* ---- emoji and other characters with no stroke glyph: real text that pops in ---- */
+const FallbackGlyph = memo(function FallbackGlyph({ c, x, y, size, family, color, animate, pen }) {
+  const ref = useRef(null);
+  const started = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!animate || started.current) return;   // (same StrictMode guard as Glyph)
+    started.current = true;
+    const now = performance.now();
+    const wait = Math.min(Math.max(0, pen.current - now), MAX_QUEUE_MS);
+    const dur = wait > 350 ? POP_MS * 0.6 : POP_MS;
+    ref.current.animate(
+      [
+        { opacity: 0, transform: 'scale(.35) rotate(-14deg)' },
+        { opacity: 1, transform: 'scale(1.14) rotate(3deg)', offset: 0.65 },
+        { opacity: 1, transform: 'scale(1) rotate(0deg)' },
+      ],
+      { duration: dur, delay: wait, easing: 'cubic-bezier(.34, 1.4, .5, 1)', fill: 'backwards' }   // hidden until its turn
+    );
+    pen.current = now + wait + dur;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <g
+      style={{
+        transform: `translate(${x}px, ${y}px)`,
+        transition: animate ? 'none' : 'transform .18s ease-out',
+      }}
+    >
+      {/* positioned by the <g>, animated on the <text>, so the two transforms never fight */}
+      <text
+        ref={ref}
+        x={0}
+        y={0}
+        fontSize={size}
+        fontFamily={family}
+        fill={color}
+        style={{ transformBox: 'fill-box', transformOrigin: '50% 60%' }}
+      >
+        {c}
+      </text>
+    </g>
+  );
+});
+
 /**
  * <ScriptText
  *   chars     = array from useCharTags: [{ id, c }]
@@ -117,6 +191,7 @@ export default function ScriptText({
   color = '#3a3a3a',
   letterSpacing = 0,
   wordSpacing = 3,
+  fallbackFont = FALLBACK_FONT,   // used for emoji, accents and anything the script font lacks
   baselineNudge = 0,      // px: move the writing up (-) or down (+) relative to the printed lines
   caret = null,
   focused = false,
@@ -141,20 +216,32 @@ export default function ScriptText({
     return () => ro.disconnect();
   }, []);
 
-  /* which characters are NEW this render? (initial text and big pastes are never animated) */
+  // one cell per visible character (an emoji made of several code points is ONE cell)
+  const cells = useMemo(() => clusterChars(chars), [chars]);
+
+  /* which cells are NEW this render? (initial text and big pastes are never animated) */
   const seen = useRef(null);
-  if (seen.current === null) seen.current = new Set(chars.map(c => c.id));
-  const fresh = chars.filter(c => !seen.current.has(c.id));
-  const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const animateIds = !reduce && fresh.length > 0 && fresh.length <= MAX_BURST
+  if (seen.current === null) seen.current = new Set(cells.map(c => c.id));
+  const fresh = cells.filter(c => !seen.current.has(c.id));
+  const animateIds = !isReduced() && fresh.length > 0 && fresh.length <= MAX_BURST
     ? new Set(fresh.map(c => c.id))
     : null;
-  useLayoutEffect(() => { chars.forEach(c => seen.current.add(c.id)); }, [chars]);
+  useLayoutEffect(() => { cells.forEach(c => seen.current.add(c.id)); }, [cells]);
 
   const scale = pack ? lineHeight / pack.lh : 1;
+
+  // sizes and widths for characters the stroke font can't draw
+  const emojiSize = pack ? Math.round(pack.asc * scale * EMOJI_EM) : 18;
+  const textSize = Math.round(lineHeight * 0.7);
+  const measure = useMemo(() => makeMeasure(fallbackFont), [fallbackFont]);
+  const fallbackWidth = useMemo(
+    () => c => measure(c, isEmoji(c) ? emojiSize : textSize) + 2,
+    [measure, emojiSize, textSize]
+  );
+
   const layout = useMemo(
-    () => (pack ? layoutScript(chars, pack, { scale, width: box.w, letterSpacing, wordSpacing }) : null),
-    [chars, pack, scale, box.w, letterSpacing, wordSpacing]
+    () => (pack ? layoutScript(cells, pack, { scale, width: box.w, letterSpacing, wordSpacing, fallbackWidth }) : null),
+    [cells, pack, scale, box.w, letterSpacing, wordSpacing, fallbackWidth]
   );
 
   // baseline of line 0 so the letters sit on the printed line
@@ -170,12 +257,12 @@ export default function ScriptText({
     const m = svgRef.current.getScreenCTM();
     if (!m) return;
     const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());   // handles note rotation
-    onCaret(indexToUnit(chars, hitTest(layout, p.x, p.y + scrollY, lineHeight)));
+    onCaret(indexToUnit(cells, hitTest(layout, p.x, p.y + scrollY, lineHeight)));
   }
 
   let caretEl = null;
   if (layout && focused && caret != null) {
-    const cp = caretPos(layout, unitToIndex(chars, caret));
+    const cp = caretPos(layout, unitToIndex(cells, caret));
     const base = lineY(cp.line);
     caretEl = (
       <line
@@ -198,18 +285,33 @@ export default function ScriptText({
       onPointerUp={onPointerUp}
     >
       {layout && layout.items.map(it => {
-        const glyph = pack.glyphs[it.c];
-        if (!glyph) return null;                                   // space, newline, unsupported character
+        if (it.kind === 'space' || it.kind === 'nl') return null;
+        const animate = !!animateIds?.has(it.id);
+        if (it.kind === 'fallback') {
+          return (
+            <FallbackGlyph
+              key={it.id}
+              c={it.c}
+              x={it.x}
+              y={lineY(it.line)}
+              size={isEmoji(it.c) ? emojiSize : textSize}
+              family={fallbackFont}
+              color={color}
+              animate={animate}
+              pen={pen}
+            />
+          );
+        }
         return (
           <Glyph
-            key={chars[it.i].id}
-            glyph={glyph}
+            key={it.id}
+            glyph={pack.glyphs[it.c]}
             x={it.x}
             y={lineY(it.line)}
             scale={scale}
             strokePx={strokePx}
             color={color}
-            animate={!!animateIds?.has(chars[it.i].id)}
+            animate={animate}
             pen={pen}
           />
         );
