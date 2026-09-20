@@ -77,31 +77,33 @@ function Note({
   // Start hold timer on pointerdown (note body or textarea)
   const startHoldTimer = (e, clientX, clientY, targetEl, pointerId) => {
     cancelHoldTimer();
-    holdStartPos.current = { x: clientX, y: clientY };
+    holdStartPos.current = { x: clientX, y: clientY, pointerId };
 
     holdTimerRef.current = setTimeout(() => {
-      // 1.5s held without moving away: activate move-only mode
+      // 1 sec held without moving away: activate move/drag mode
       setIsHoldMoveActive(true);
       isHoldMoveActiveRef.current = true;
-      if (navigator.vibrate) navigator.vibrate(40);
+      if (navigator.vibrate) navigator.vibrate(50);
 
       // Blur textarea if currently focused
       if (textareaRef.current) {
         textareaRef.current.blur();
       }
 
-      // Initialize dragging immediately so the user can continue moving
+      // Initialize dragging immediately so the user can drag to any desired place
       drag.current = { offX: clientX - note.x, offY: clientY - note.y };
       try {
         if (targetEl && targetEl.setPointerCapture) {
           targetEl.setPointerCapture(pointerId);
+        } else if (rootRef.current && rootRef.current.setPointerCapture) {
+          rootRef.current.setPointerCapture(pointerId);
         }
       } catch (err) {
-        // ignore capture errors if already released
+        // ignore capture errors
       }
       rootRef.current?.classList.add('is-dragging');
       holdTimerRef.current = null;
-    }, 1500);
+    }, 1000);
   };
 
   // Unselect when clicking outside this note
@@ -131,7 +133,7 @@ function Note({
     }
 
     // On note paper / sticker / container:
-    // Start hold timer (to unlock move badge / move mode indicator) and initiate drag
+    // Start 1 sec hold timer (enables move mode indicator badge and unlocks drag) and initiate drag
     startHoldTimer(e, e.clientX, e.clientY, e.currentTarget, e.pointerId);
     drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -411,7 +413,7 @@ function Note({
     onFront(note.id);
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
-    // Start hold timer on textarea so holding for 1.5s triggers move mode
+    // Start hold timer on textarea so holding for 1s triggers move/drag mode
     startHoldTimer(e, e.clientX, e.clientY, e.currentTarget, e.pointerId);
   }
 
