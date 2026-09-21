@@ -50,6 +50,7 @@ function Note({
   const rotateDrag = useRef(null);
   const rootRef = useRef(null);
   const renderRef = useRef(null); // the mirror layer that shows animated characters
+  const scriptTextRef = useRef(null);
   const textareaRef = useRef(null);
   const lastTextTapTime = useRef(0);
   const lastTextTransformToggleTime = useRef(0);
@@ -179,6 +180,7 @@ function Note({
   // Highlight drawing state
   const isHighlightDrawing = useRef(false);
   const highlightStartCharIndex = useRef(null);
+  const highlightRangeRef = useRef(null); // synchronous reference to avoid stale closures on pointerup
   const [activeHighlightRange, setActiveHighlightRange] = useState(null); // { start, end }
   const annotationsRef = useRef([]); // holds active rough-notation instances
 
@@ -209,8 +211,6 @@ function Note({
       if (rangeSpans.length === 0) return;
 
       // Group consecutive spans on each visual line to annotate cleanly
-      // Or annotate the first and last span to highlight individual words/lines
-      // To ensure text is fully visible, we create an inline wrapper around the highlighted character group
       try {
         // Group by line: detect line wraps by comparing rect top
         let currentLine = [rangeSpans[0]];
@@ -219,7 +219,6 @@ function Note({
         for (let i = 1; i < rangeSpans.length; i++) {
           const prevRect = rangeSpans[i - 1].getBoundingClientRect();
           const currRect = rangeSpans[i].getBoundingClientRect();
-          // If vertical difference is greater than 10px, it wrapped to the next line
           if (Math.abs(currRect.top - prevRect.top) > 10) {
             currentLine = [rangeSpans[i]];
             lines.push(currentLine);
@@ -232,18 +231,14 @@ function Note({
           const first = lineSpans[0];
           const last = lineSpans[lineSpans.length - 1];
 
-          const parentRect = renderRef.current.getBoundingClientRect();
-          const firstRect = first.getBoundingClientRect();
-          const lastRect = last.getBoundingClientRect();
-
           const targetEl = document.createElement('span');
           targetEl.className = 'rough-target-span';
           targetEl.style.position = 'absolute';
-          // Neatly sized target element tightly matching character bounds
-          targetEl.style.top = `${firstRect.top - parentRect.top}px`;
-          targetEl.style.left = `${firstRect.left - parentRect.left - 1}px`;
-          targetEl.style.width = `${Math.max(8, lastRect.right - firstRect.left + 2)}px`;
-          targetEl.style.height = `${Math.max(14, Math.max(firstRect.height, lastRect.height))}px`;
+          // Use local offsetLeft/offsetTop relative to container so rotated notes do not misalign
+          targetEl.style.top = `${first.offsetTop}px`;
+          targetEl.style.left = `${first.offsetLeft - 1}px`;
+          targetEl.style.width = `${Math.max(8, last.offsetLeft + last.offsetWidth - first.offsetLeft + 2)}px`;
+          targetEl.style.height = `${Math.max(14, Math.max(first.offsetHeight, last.offsetHeight))}px`;
 
           renderRef.current.appendChild(targetEl);
 
@@ -294,8 +289,13 @@ function Note({
     };
   }, [note.highlights, note.text, note.width, note.textWidth, note.textHeight]);
 
-  // Helper to find char index from coordinates within renderRef
+  // Helper to find char index from coordinates within renderRef or ScriptText
   const getCharIndexFromPoint = (clientX, clientY) => {
+    // If cursive script is active, hit-test through ScriptText (with exact SVG matrix inverse)
+    if (scriptUrl && scriptTextRef.current?.getCharIndexFromPoint) {
+      return scriptTextRef.current.getCharIndexFromPoint(clientX, clientY);
+    }
+
     if (!renderRef.current) return -1;
     const spans = Array.from(renderRef.current.querySelectorAll('.note-char-span'));
     if (spans.length === 0) return -1;
@@ -328,7 +328,6 @@ function Note({
     return minDistance < 40 ? closestIndex : -1;
   };
 
-  // Highlighter Pen Pointer Event Handlers
   // Highlighter Pen / Eraser Pointer Event Handlers
   const handleHighlighterPointerDown = (e) => {
     e.stopPropagation();
@@ -343,7 +342,7 @@ function Note({
         // Find if this character is within any highlight and remove it immediately
         if (note.highlights && note.highlights.length > 0) {
           const hitHighlight = note.highlights.find(
-            (hl) => charIndex >= hl.startIndex && charIndex <= hl.endIndex
+            (hl) => charIndex >= Math.min(hl.startIndex, hl.endIndex) && charIndex <= Math.max(hl.startIndex, hl.endIndex)
           );
           if (hitHighlight && onRemoveHighlight) {
             onRemoveHighlight(note.id, hitHighlight.id);
@@ -357,7 +356,9 @@ function Note({
 
       isHighlightDrawing.current = true;
       highlightStartCharIndex.current = charIndex;
-      setActiveHighlightRange({ start: charIndex, end: charIndex });
+      const initialRange = { start: charIndex, end: charIndex };
+      highlightRangeRef.current = initialRange;
+      setActiveHighlightRange(initialRange);
       e.currentTarget.setPointerCapture(e.pointerId);
     }
   };
@@ -370,7 +371,7 @@ function Note({
         // Erase any highlight that the eraser crosses over while moving
         if (note.highlights && note.highlights.length > 0) {
           const hitHighlight = note.highlights.find(
-            (hl) => charIndex >= hl.startIndex && charIndex <= hl.endIndex
+            (hl) => charIndex >= Math.min(hl.startIndex, hl.endIndex) && charIndex <= Math.max(hl.startIndex, hl.endIndex)
           );
           if (hitHighlight && onRemoveHighlight) {
             onRemoveHighlight(note.id, hitHighlight.id);
@@ -381,7 +382,9 @@ function Note({
 
       const start = Math.min(highlightStartCharIndex.current, charIndex);
       const end = Math.max(highlightStartCharIndex.current, charIndex);
-      setActiveHighlightRange({ start, end });
+      const updatedRange = { start, end };
+      highlightRangeRef.current = updatedRange;
+      setActiveHighlightRange(updatedRange);
     }
   };
 
@@ -391,14 +394,18 @@ function Note({
 
     if (highlighterMode === 'eraser') {
       highlightStartCharIndex.current = null;
+      highlightRangeRef.current = null;
       return;
     }
 
-    if (activeHighlightRange && activeHighlightRange.start !== -1) {
-      let startIndex = activeHighlightRange.start;
-      let endIndex = activeHighlightRange.end;
+    // Read synchronously from highlightRangeRef.current to avoid stale state closures
+    const currentRange = highlightRangeRef.current || activeHighlightRange;
 
-      // If user simply clicked on a word without dragging, expand to highlight the whole word or character
+    if (currentRange && currentRange.start !== -1) {
+      let startIndex = currentRange.start;
+      let endIndex = currentRange.end;
+
+      // If user simply clicked on a word without dragging, expand to highlight the whole word
       if (startIndex === endIndex && note.text) {
         const text = note.text;
         // Expand left to start of word
@@ -417,12 +424,13 @@ function Note({
           startIndex,
           endIndex,
           color: highlighterColor || '#fde047',
-          type: highlighterType || 'highlight', // Rough highlight
+          type: highlighterType || 'highlight',
           createdAt: Date.now(),
         });
       }
     }
 
+    highlightRangeRef.current = null;
     setActiveHighlightRange(null);
     highlightStartCharIndex.current = null;
   };
@@ -858,12 +866,19 @@ function Note({
         {/* layer 1 (visible): ScriptText (continuous cursive single-stroke handwriting) or note-render */}
         {scriptUrl ? (
           <ScriptText
+            ref={scriptTextRef}
             chars={chars}
             packUrl={scriptUrl}
             lineHeight={config.lineHeight ?? 33}
             color={note.textColor || '#3a3a3a'}
             caret={sel.start === sel.end ? sel.start : null}
             focused={sel.focused}
+            highlights={note.highlights || []}
+            activeHighlightRange={activeHighlightRange}
+            highlighterColor={highlighterColor}
+            highlighterType={highlighterType}
+            isHighlighterActive={isHighlighterActive}
+            highlighterMode={highlighterMode}
             onCaret={(u) => {
               if (textareaRef.current) {
                 textareaRef.current.focus();
@@ -873,6 +888,7 @@ function Note({
             }}
             onDoubleClick={handleTextareaDoubleClick}
             onPointerDown={handleTextareaPointerDown}
+            onPointerMove={handleTextareaPointerMove}
             onPointerUp={handleTextareaPointerUp}
           />
         ) : (

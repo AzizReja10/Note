@@ -354,11 +354,34 @@
   z-index: 2;
   cursor: text;
 }
+.script-layer.is-highlighter-mode {
+  cursor: url('/pen.png') 1 1, crosshair !important;
+}
+.script-layer.is-eraser-mode {
+  cursor: url('/eraser.png') 2 2, pointer !important;
+}
 .note-input.is-script {
   pointer-events: none; /* clicks pass through or go directly to the drawn text */
 }
+.note-input.is-script.is-highlighter-mode,
+.note-input.is-script.is-eraser-mode {
+  pointer-events: auto !important;
+}
 .note-input.is-script::selection {
   background: transparent;
+}
+.script-highlight-marker {
+  mix-blend-mode: multiply;
+  transition: opacity 0.15s ease;
+}
+.dark .script-highlight-marker {
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+.script-highlight-line,
+.script-highlight-box,
+.script-highlight-circle {
+  transition: opacity 0.15s ease;
 }
 .script-caret {
   animation: caret-blink 1s steps(1) infinite;

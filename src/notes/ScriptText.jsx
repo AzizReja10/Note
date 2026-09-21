@@ -8,9 +8,9 @@
 
    Font packs come from tools/build_script_font.py (Vara stroke fonts, MIT).
    ===================================================================== */
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  layoutScript, caretPos, hitTest, unitToIndex, indexToUnit, clusterChars, isEmoji,
+  layoutScript, caretPos, hitTest, cellAtPoint, unitToIndex, indexToUnit, clusterChars, isEmoji,
 } from './scriptLayout';
 
 /* ---- tuning knobs ---- */
@@ -183,7 +183,7 @@ const FallbackGlyph = memo(function FallbackGlyph({ c, x, y, size, family, color
  *   onCaret   = (utf16Index) => void   called when the user clicks the drawn text
  * />
  */
-export default function ScriptText({
+export default forwardRef(function ScriptText({
   chars,
   packUrl,
   lineHeight = 28,
@@ -195,11 +195,18 @@ export default function ScriptText({
   baselineNudge = 0,      // px: move the writing up (-) or down (+) relative to the printed lines
   caret = null,
   focused = false,
+  highlights = [],
+  activeHighlightRange = null,
+  highlighterColor = '#facc15',
+  highlighterType = 'highlight',
+  isHighlighterActive = false,
+  highlighterMode = 'draw',
   onCaret,
   onDoubleClick,
   onPointerDown,
+  onPointerMove,
   onPointerUp,
-}) {
+}, ref) {
   const pack = useScriptFont(packUrl);
   const svgRef = useRef(null);
   const pen = useRef(0);
@@ -252,6 +259,104 @@ export default function ScriptText({
 
   const lineY = line => line * lineHeight + baseOffset - scrollY;
 
+  // Expose character hit-testing to parent components (handles all rotation, scale, offsets natively)
+  useImperativeHandle(ref, () => ({
+    getCharIndexFromPoint(clientX, clientY) {
+      if (!svgRef.current || !layout) return -1;
+      const m = svgRef.current.getScreenCTM();
+      if (!m) return -1;
+      const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse());
+      const cellIdx = cellAtPoint(layout, p.x, p.y + scrollY, lineHeight);
+      if (cellIdx === -1) return -1;
+      return indexToUnit(cells, cellIdx);
+    }
+  }), [layout, cells, lineHeight, scrollY]);
+
+  // Combine saved highlights and current active preview highlight range
+  const renderedHighlights = useMemo(() => {
+    if (!layout || !layout.items.length) return [];
+
+    const itemRanges = layout.items.map(it => {
+      const startUnit = indexToUnit(cells, it.i);
+      const endUnit = startUnit + (cells[it.i]?.c?.length || 1) - 1;
+      return { it, startUnit, endUnit };
+    });
+
+    const list = [...(highlights || [])];
+    if (activeHighlightRange && activeHighlightRange.start != null && activeHighlightRange.end != null) {
+      list.push({
+        id: '__preview__',
+        startIndex: activeHighlightRange.start,
+        endIndex: activeHighlightRange.end,
+        color: highlighterColor || '#facc15',
+        type: highlighterType || 'highlight',
+        isPreview: true,
+      });
+    }
+
+    const results = [];
+
+    list.forEach(hl => {
+      if (hl.startIndex == null || hl.endIndex == null) return;
+      const s = Math.min(hl.startIndex, hl.endIndex);
+      const e = Math.max(hl.startIndex, hl.endIndex);
+
+      const matched = itemRanges.filter(
+        ir => !(ir.endUnit < s || ir.startUnit > e) && ir.it.kind !== 'nl'
+      );
+      if (matched.length === 0) return;
+
+      // Group by line
+      const byLine = new Map();
+      matched.forEach(({ it }) => {
+        if (!byLine.has(it.line)) byLine.set(it.line, []);
+        byLine.get(it.line).push(it);
+      });
+
+      byLine.forEach((lineItems, lineNum) => {
+        if (lineItems.length === 0) return;
+
+        // Skip leading/trailing pure whitespace on this line unless that's all there is
+        let first = 0;
+        while (first < lineItems.length && lineItems[first].kind === 'space' && first < lineItems.length - 1) {
+          first++;
+        }
+        let last = lineItems.length - 1;
+        while (last > first && lineItems[last].kind === 'space') {
+          last--;
+        }
+        const trimmed = lineItems.slice(first, last + 1);
+        if (trimmed.length === 0) return;
+
+        const minX = Math.min(...trimmed.map(it => it.x));
+        const maxX = Math.max(...trimmed.map(it => it.x + it.w));
+        const yBaseline = lineNum * lineHeight + baseOffset - scrollY;
+
+        const asc = pack ? pack.asc * scale : lineHeight * 0.65;
+        const desc = pack ? pack.desc * scale : lineHeight * 0.25;
+        const padX = 2;
+        const rx = Math.max(0, minX - padX);
+        const rw = Math.max(8, (maxX + padX) - rx);
+        const ry = yBaseline - asc - 1;
+        const rh = Math.max(14, asc + desc + 3);
+
+        results.push({
+          key: `${hl.id || 'hl'}-${lineNum}`,
+          type: hl.type || 'highlight',
+          color: hl.color || '#facc15',
+          isPreview: hl.isPreview,
+          x: rx,
+          y: ry,
+          w: rw,
+          h: rh,
+          baselineY: yBaseline,
+        });
+      });
+    });
+
+    return results;
+  }, [layout, cells, highlights, activeHighlightRange, highlighterColor, highlighterType, pack, scale, baseOffset, scrollY, lineHeight]);
+
   function handleClick(e) {
     if (!layout || !onCaret) return;
     const m = svgRef.current.getScreenCTM();
@@ -277,13 +382,89 @@ export default function ScriptText({
   return (
     <svg
       ref={svgRef}
-      className="script-layer"
+      className={`script-layer ${isHighlighterActive ? (highlighterMode === 'eraser' ? 'is-eraser-mode' : 'is-highlighter-mode') : ''}`}
       aria-hidden="true"
       onClick={handleClick}
       onDoubleClick={onDoubleClick}
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
+      {/* Layer 0: Highlights behind the ink strokes */}
+      {renderedHighlights.map(hl => {
+        if (hl.type === 'underline') {
+          return (
+            <line
+              key={hl.key}
+              x1={hl.x}
+              y1={hl.baselineY + 2.5}
+              x2={hl.x + hl.w}
+              y2={hl.baselineY + 2.5}
+              stroke={hl.color}
+              strokeWidth={3}
+              strokeLinecap="round"
+              opacity={hl.isPreview ? 0.6 : 0.85}
+              className="script-highlight-line"
+            />
+          );
+        }
+        if (hl.type === 'box') {
+          return (
+            <rect
+              key={hl.key}
+              x={hl.x - 1}
+              y={hl.y}
+              width={hl.w + 2}
+              height={hl.h}
+              rx={5}
+              ry={5}
+              fill="none"
+              stroke={hl.color}
+              strokeWidth={2}
+              strokeDasharray={hl.isPreview ? '4 3' : undefined}
+              opacity={hl.isPreview ? 0.7 : 0.9}
+              className="script-highlight-box"
+            />
+          );
+        }
+        if (hl.type === 'circle') {
+          const r = hl.h / 2;
+          return (
+            <rect
+              key={hl.key}
+              x={hl.x - 3}
+              y={hl.y - 2}
+              width={hl.w + 6}
+              height={hl.h + 4}
+              rx={r + 2}
+              ry={r + 2}
+              fill="none"
+              stroke={hl.color}
+              strokeWidth={2}
+              strokeDasharray={hl.isPreview ? '4 3' : undefined}
+              opacity={hl.isPreview ? 0.7 : 0.9}
+              className="script-highlight-circle"
+            />
+          );
+        }
+        // Default 'highlight' marker backdrop
+        return (
+          <rect
+            key={hl.key}
+            x={hl.x}
+            y={hl.y}
+            width={hl.w}
+            height={hl.h}
+            rx={4}
+            ry={4}
+            fill={hl.color}
+            opacity={hl.isPreview ? 0.4 : 0.48}
+            className="script-highlight-marker"
+          />
+        );
+      })}
+
+      {/* Layer 1: Ink glyphs and characters */}
       {layout && layout.items.map(it => {
         if (it.kind === 'space' || it.kind === 'nl') return null;
         const animate = !!animateIds?.has(it.id);
@@ -319,4 +500,4 @@ export default function ScriptText({
       {caretEl}
     </svg>
   );
-}
+});

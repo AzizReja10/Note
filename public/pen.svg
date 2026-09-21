@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <!-- Pen Nib (contact point at 2,30) -->
+  <path d="M2 30 L5 23 L9 27 L3 31 Z" fill="#FACC15" stroke="#0F172A" stroke-width="1.4" stroke-linejoin="round"/>
+  <!-- Pen Barrel -->
+  <path d="M5 23 L19 9 L23 13 L9 27 Z" fill="#3B82F6" stroke="#0F172A" stroke-width="1.4" stroke-linejoin="round"/>
+  <!-- Highlighter Accent Stripe -->
+  <path d="M8 20 L12 16 L14 18 L10 22 Z" fill="#FDE047"/>
+  <!-- Pen Cap Top -->
+  <path d="M19 9 L23 5 L27 9 L23 13 Z" fill="#1D4ED8" stroke="#0F172A" stroke-width="1.4" stroke-linejoin="round"/>
+  <!-- Pen Tip Precision Dot -->
+  <circle cx="2.5" cy="30.5" r="1.2" fill="#0F172A"/>
+</svg>

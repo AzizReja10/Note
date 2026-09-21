@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
    scriptLayout.js: pure maths for laying out text in a script font pack.
    No React, no DOM, so it's easy to test and reuse.
 
@@ -141,6 +141,45 @@ export function hitTest(layout, x, y, lineHeight) {
   return after ?? layout.items.length;
 }
 
+/** which cell index is directly under the point (x, y) in layout px */
+export function cellAtPoint(layout, x, y, lineHeight) {
+  if (!layout || !layout.items || layout.items.length === 0) return -1;
+  const line = Math.max(0, Math.min(layout.lines - 1, Math.floor(y / lineHeight)));
+  const lineItems = layout.items.filter(it => it.line === line && it.kind !== 'nl');
+
+  if (lineItems.length === 0) {
+    let closest = -1;
+    let minD = Infinity;
+    for (const it of layout.items) {
+      if (it.kind === 'nl') continue;
+      const cx = it.x + it.w / 2;
+      const cy = (it.line + 0.5) * lineHeight;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < minD) { minD = d; closest = it.i; }
+    }
+    return minD < 60 ? closest : -1;
+  }
+
+  for (const it of lineItems) {
+    if (x >= it.x && x <= it.x + it.w) {
+      return it.i;
+    }
+  }
+
+  if (x < lineItems[0].x) return lineItems[0].i;
+  const last = lineItems[lineItems.length - 1];
+  if (x > last.x + last.w) return last.i;
+
+  let closest = lineItems[0].i;
+  let minD = Infinity;
+  for (const it of lineItems) {
+    const cx = it.x + it.w / 2;
+    const d = Math.abs(x - cx);
+    if (d < minD) { minD = d; closest = it.i; }
+  }
+  return closest;
+}
+
 /* The textarea counts UTF-16 units; cells can be several units long (an emoji is 2 or more). */
 export function unitToIndex(cells, unit) {
   let u = 0;
@@ -152,3 +191,4 @@ export function indexToUnit(cells, index) {
   for (let i = 0; i < index && i < cells.length; i++) u += cells[i].c.length;
   return u;
 }
+
