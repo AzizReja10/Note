@@ -68,6 +68,35 @@ function Note({
     }
   }, [scriptUrl]);
 
+  // Responsive width & horizontal bounds calculation
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  const isSticker = !!config?.isSticker;
+  const noteWidth = note.width || config?.width || 380;
+  const screenW = typeof window !== 'undefined' ? window.innerWidth : 360;
+  const screenH = typeof window !== 'undefined' ? window.innerHeight : 600;
+
+  // Stickers naturally fit within screen; notes take up to screen - 32 on mobile
+  const renderedWidth = isSticker
+    ? Math.min(noteWidth, screenW - 16)
+    : (isMobile ? Math.min(noteWidth, screenW - 32) : noteWidth);
+
+  // Horizontal bounds:
+  // Stickers can move fully across mobile and desktop (including slight overhang on edges)
+  const minX = isSticker ? -Math.round(renderedWidth * 0.25) : (isMobile ? 8 : 16);
+  const maxX = isSticker
+    ? Math.max(minX, screenW - Math.round(renderedWidth * 0.75))
+    : Math.max(minX, screenW - renderedWidth - (isMobile ? 8 : 16));
+
+  // Vertical bounds:
+  const minY = isSticker ? 50 : 60;
+  const maxY = Math.max(minY + 30, screenH - (isSticker ? Math.round(renderedWidth * 0.4) : 120));
+
+  // Calculate horizontal position:
+  let renderLeft = note.x;
+  if (typeof window !== 'undefined') {
+    renderLeft = Math.min(maxX, Math.max(minX, note.x));
+  }
+
   // Keep isHoldMoveActiveRef in sync with state
   useEffect(() => {
     isHoldMoveActiveRef.current = isHoldMoveActive;
@@ -108,7 +137,7 @@ function Note({
       }
 
       // Initialize dragging immediately so the user can drag to any desired place
-      drag.current = { offX: clientX - note.x, offY: clientY - note.y };
+      drag.current = { offX: clientX - renderLeft, offY: clientY - note.y };
       try {
         if (targetEl && targetEl.setPointerCapture) {
           targetEl.setPointerCapture(pointerId);
@@ -145,7 +174,7 @@ function Note({
 
     // If moving mode is already active, allow moving/dragging immediately on pointer down
     if (isHoldMoveActiveRef.current) {
-      drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
+      drag.current = { offX: e.clientX - renderLeft, offY: e.clientY - note.y };
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch (err) {}
@@ -162,8 +191,10 @@ function Note({
     // On note paper / sticker / container:
     // Start 1 sec hold timer (enables move mode indicator badge and unlocks drag) and initiate drag
     startHoldTimer(e, e.clientX, e.clientY, e.currentTarget, e.pointerId);
-    drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { offX: e.clientX - renderLeft, offY: e.clientY - note.y };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {}
     rootRef.current.classList.add('is-dragging');
   }
 
@@ -222,7 +253,7 @@ function Note({
 
     // If moving mode is already active, allow moving/dragging note immediately
     if (isHoldMoveActiveRef.current) {
-      drag.current = { offX: e.clientX - note.x, offY: e.clientY - note.y };
+      drag.current = { offX: e.clientX - renderLeft, offY: e.clientY - note.y };
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch (err) {}
@@ -284,12 +315,8 @@ function Note({
     if (!drag.current) return;
     const rawX = e.clientX - drag.current.offX;
     const rawY = e.clientY - drag.current.offY;
-    const noteWidth = config.width || 380;
-    const maxNoteW = Math.min(noteWidth, window.innerWidth - 32);
-    const maxX = Math.max(8, window.innerWidth - maxNoteW - 12);
-    const maxY = Math.max(70, window.innerHeight - 120);
-    const clampedX = Math.min(maxX, Math.max(8, rawX));
-    const clampedY = Math.min(maxY, Math.max(60, rawY));
+    const clampedX = Math.min(maxX, Math.max(minX, rawX));
+    const clampedY = Math.min(maxY, Math.max(minY, rawY));
     onMove(note.id, clampedX, clampedY);
   }
 
@@ -475,23 +502,6 @@ function Note({
     ...(note.textHeight ? { height: `${note.textHeight}px` } : {}),
   };
 
-  // Responsive width & centered clamping for rendering
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-  const noteWidth = note.width || config.width || 380;
-  // If on mobile / narrow screen, ensure note width fits cleanly within the screen
-  const renderedWidth = isMobile ? Math.min(noteWidth, (window.innerWidth || 360) - 32) : noteWidth;
-  
-  // Calculate horizontal position:
-  let renderLeft = note.x;
-  if (typeof window !== 'undefined') {
-    if (isMobile) {
-      // Always keep centered on small screens / mobile
-      renderLeft = Math.max(16, Math.round((window.innerWidth - renderedWidth) / 2));
-    } else {
-      const maxX = Math.max(16, window.innerWidth - renderedWidth - 16);
-      renderLeft = Math.min(maxX, Math.max(16, note.x));
-    }
-  }
 
   // Dynamic max characters calculation based on actual width & height of the text area
   // Font is Patrick Hand 22px / line-height 1.5 (33px per line).
@@ -729,7 +739,7 @@ function Note({
           data-html2canvas-ignore="true"
         >
           <span className="note-move-badge-icon">✥</span>
-          <span className="note-move-badge-text">Moving Note</span>
+          <span className="note-move-badge-text">{config?.isSticker ? 'Moving Sticker' : 'Moving Note'}</span>
         </div>
       )}
 

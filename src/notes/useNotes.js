@@ -98,10 +98,10 @@ export function useNotes(storage = localStorageAdapter) {
     (id, x, y) => {
       const winW = typeof window !== 'undefined' ? window.innerWidth : 1200;
       const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
-      const maxX = Math.max(8, winW - 80);
-      const maxY = Math.max(70, winH - 120);
-      const clampedX = Math.min(maxX, Math.max(8, x));
-      const clampedY = Math.min(maxY, Math.max(60, y));
+      const maxX = Math.max(0, winW - 20);
+      const maxY = Math.max(50, winH - 60);
+      const clampedX = Math.min(maxX, Math.max(-250, Math.round(x)));
+      const clampedY = Math.min(maxY, Math.max(40, Math.round(y)));
       patch(id, { x: clampedX, y: clampedY });
     },
     [patch]
