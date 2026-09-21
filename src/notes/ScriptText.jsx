@@ -337,33 +337,79 @@ export default forwardRef(function ScriptText({
 
         const minX = Math.min(...trimmed.map(it => it.x));
         const maxX = Math.max(...trimmed.map(it => it.x + it.w));
-        const yBaseline = lineNum * lineHeight + baseOffset - scrollY;
+        const textWidth = Math.max(4, maxX - minX);
 
-        const asc = pack ? pack.asc * scale : lineHeight * 0.65;
-        const desc = pack ? pack.desc * scale : lineHeight * 0.25;
-        const padX = 2;
-        const rx = Math.max(0, minX - padX);
-        const rw = Math.max(8, (maxX + padX) - rx);
-        const ry = yBaseline - asc - 1;
-        const rh = Math.max(14, asc + desc + 3);
+        const lineTop = lineNum * lineHeight - scrollY;
+        const yBaseline = lineTop + baseOffset;
+        const type = hl.type || 'highlight';
+
+        let x, y, w, h, rx, ry;
+
+        if (type === 'circle') {
+          // Pill/capsule shape: semicircular ends with radius h / 2.
+          // Constrained to line slot so adjacent lines NEVER collide (3px gap).
+          const circleH = Math.max(18, Math.min(lineHeight - 3, lineHeight * 0.9));
+          const circleY = lineTop + (lineHeight - circleH) / 2;
+          const padX = Math.max(7, Math.round(circleH * 0.28));
+          const circleX = minX - padX;
+          const circleW = textWidth + padX * 2;
+          const circleR = circleH / 2;
+
+          x = circleX;
+          y = circleY;
+          w = circleW;
+          h = circleH;
+          rx = circleR;
+          ry = circleR;
+        } else if (type === 'box') {
+          // Bounding rectangle: 4px gap between lines guarantees no collision.
+          const boxH = Math.max(16, Math.min(lineHeight - 4, lineHeight * 0.88));
+          const boxY = lineTop + (lineHeight - boxH) / 2;
+          const padX = 4;
+          const boxX = minX - padX;
+          const boxW = textWidth + padX * 2;
+
+          x = boxX;
+          y = boxY;
+          w = boxW;
+          h = boxH;
+          rx = 4;
+          ry = 4;
+        } else {
+          // Marker highlight backdrop
+          const hlH = Math.max(16, Math.min(lineHeight - 3.5, lineHeight * 0.88));
+          const hlY = lineTop + (lineHeight - hlH) / 2;
+          const padX = 3;
+          const hlX = minX - padX;
+          const hlW = textWidth + padX * 2;
+
+          x = hlX;
+          y = hlY;
+          w = hlW;
+          h = hlH;
+          rx = 3.5;
+          ry = 3.5;
+        }
 
         results.push({
           key: `${hl.id || 'hl'}-${lineNum}`,
-          type: hl.type || 'highlight',
+          type,
           color: hl.color || '#fde047',
           erase: hl.erase,
           isPreview: hl.isPreview,
-          x: rx,
-          y: ry,
-          w: rw,
-          h: rh,
+          x,
+          y,
+          w,
+          h,
+          rx,
+          ry,
           baselineY: yBaseline,
         });
       });
     });
 
     return results;
-  }, [layout, cells, highlights, activeHighlightRange, highlighterColor, highlighterType, pack, scale, baseOffset, scrollY, lineHeight]);
+  }, [layout, cells, highlights, activeHighlightRange, highlighterColor, highlighterType, baseOffset, scrollY, lineHeight]);
 
   function handleClick(e) {
     if (!layout || !onCaret) return;
@@ -391,6 +437,7 @@ export default forwardRef(function ScriptText({
     <svg
       ref={svgRef}
       className={`script-layer ${isHighlighterActive ? (highlighterMode === 'eraser' ? 'is-eraser-mode' : 'is-highlighter-mode') : ''}`}
+      style={{ overflow: 'visible' }}
       aria-hidden="true"
       onClick={handleClick}
       onDoubleClick={onDoubleClick}
@@ -408,7 +455,8 @@ export default forwardRef(function ScriptText({
               y={hl.y}
               width={hl.w}
               height={hl.h}
-              rx={3}
+              rx={hl.rx || 3}
+              ry={hl.ry || 3}
               fill="rgba(239, 68, 68, 0.28)"
               stroke="rgba(239, 68, 68, 0.85)"
               strokeWidth={1.5}
@@ -437,15 +485,17 @@ export default forwardRef(function ScriptText({
           return (
             <rect
               key={hl.key}
-              x={hl.x - 1}
+              x={hl.x}
               y={hl.y}
-              width={hl.w + 2}
+              width={hl.w}
               height={hl.h}
-              rx={3}
-              ry={3}
+              rx={hl.rx || 4}
+              ry={hl.ry || 4}
               fill="none"
               stroke={hl.color}
-              strokeWidth={2}
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
               strokeDasharray={hl.isPreview ? '4 3' : undefined}
               opacity={hl.isPreview ? 0.7 : 0.95}
               className="script-highlight-box"
@@ -456,15 +506,17 @@ export default forwardRef(function ScriptText({
           return (
             <rect
               key={hl.key}
-              x={hl.x - 3}
-              y={hl.y - 2}
-              width={hl.w + 6}
-              height={hl.h + 4}
-              rx={12}
-              ry={12}
+              x={hl.x}
+              y={hl.y}
+              width={hl.w}
+              height={hl.h}
+              rx={hl.rx || hl.h / 2}
+              ry={hl.ry || hl.h / 2}
               fill="none"
               stroke={hl.color}
-              strokeWidth={2}
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
               strokeDasharray={hl.isPreview ? '4 3' : undefined}
               opacity={hl.isPreview ? 0.7 : 0.95}
               className="script-highlight-circle"
@@ -479,8 +531,8 @@ export default forwardRef(function ScriptText({
             y={hl.y}
             width={hl.w}
             height={hl.h}
-            rx={4}
-            ry={4}
+            rx={hl.rx || 3.5}
+            ry={hl.ry || 3.5}
             fill={hl.color}
             opacity={hl.isPreview ? 0.4 : 0.55}
             className="script-highlight-marker"

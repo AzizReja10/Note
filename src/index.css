@@ -353,6 +353,7 @@
   height: 100%;
   z-index: 2;
   cursor: text;
+  overflow: visible !important;
 }
 .script-layer.is-highlighter-mode {
   cursor: url('/pen.png') 1 1, crosshair !important;
