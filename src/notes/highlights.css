@@ -1,0 +1,108 @@
+/* =====================================================================
+   highlights.css: CSS rules for markers that live directly on character spans.
+   Matches the fine-tuned styles for:
+     - highlight (semi-transparent marker stripe with rounded ends)
+     - underline (dashed / solid hand-drawn underline)
+     - box (clean outlined bounding rectangle)
+     - circle (rounded pill outline)
+     - eraser preview
+   ===================================================================== */
+
+/* Base marker character span */
+.note-char-span.hl-h {
+  background-color: var(--hlc-h, #fde047);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding-top: 1px;
+  padding-bottom: 2px;
+  line-height: inherit;
+  display: inline-block;
+  mix-blend-mode: multiply;
+  opacity: 0.88;
+}
+
+.dark .note-char-span.hl-h {
+  mix-blend-mode: screen;
+  opacity: 0.65;
+}
+
+/* Rounded caps for highlight marker */
+.note-char-span.hl-h-s {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+  padding-left: 3px;
+  margin-left: -1px;
+}
+
+.note-char-span.hl-h-e {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  padding-right: 3px;
+  margin-right: -1px;
+}
+
+/* Underline style */
+.note-char-span.hl-u {
+  border-bottom: 2.2px dashed var(--hlc-u, #ef4444);
+  padding-bottom: 1px;
+  display: inline-block;
+}
+
+/* Box style: outlined rectangle */
+.note-char-span.hl-b {
+  border-top: 2px solid var(--hlc-b, #3b82f6);
+  border-bottom: 2px solid var(--hlc-b, #3b82f6);
+  padding-top: 1px;
+  padding-bottom: 1px;
+  display: inline-block;
+}
+
+.note-char-span.hl-b-s {
+  border-left: 2px solid var(--hlc-b, #3b82f6);
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+  padding-left: 3px;
+  margin-left: -2px;
+}
+
+.note-char-span.hl-b-e {
+  border-right: 2px solid var(--hlc-b, #3b82f6);
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+  padding-right: 3px;
+  margin-right: -2px;
+}
+
+/* Circle style: pill-shaped rounded outline */
+.note-char-span.hl-c {
+  border-top: 2px solid var(--hlc-c, #ec4899);
+  border-bottom: 2px solid var(--hlc-c, #ec4899);
+  padding-top: 2px;
+  padding-bottom: 2px;
+  display: inline-block;
+}
+
+.note-char-span.hl-c-s {
+  border-left: 2px solid var(--hlc-c, #ec4899);
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+  padding-left: 5px;
+  margin-left: -3px;
+}
+
+.note-char-span.hl-c-e {
+  border-right: 2px solid var(--hlc-c, #ec4899);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+  padding-right: 5px;
+  margin-right: -3px;
+}
+
+/* Eraser live preview */
+.note-char-span.hl-erase {
+  background-color: rgba(239, 68, 68, 0.28) !important;
+  border-radius: 2px;
+  text-decoration: line-through;
+  text-decoration-color: rgba(239, 68, 68, 0.9);
+  display: inline-block;
+}

@@ -1,9 +1,11 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useCharTags } from './useCharTags';
-import { annotate } from 'rough-notation';
 import { dustDelete } from './dustDelete';
 import ScriptText, { loadScriptFont } from './ScriptText';
 import { getFontScriptUrl } from './fonts';
+import { marksFor } from './highlights';
+import { useHighlightPen } from './useHighlightPen';
+import './highlights.css';
 
 // Classes to style: .note  .note-paper  .note-text  .note-render  .note-input
 //                   .ch  .ch-new  .note-delete  .is-dragging
@@ -31,9 +33,10 @@ function Note({
   highlighterColor = '#facc15',
   highlighterType = 'highlight',
   highlighterMode = 'draw', // 'draw' | 'eraser'
-  onAddHighlight,
-  onRemoveHighlight,
+  _onAddHighlight,
+  _onRemoveHighlight,
   onClearHighlights,
+  onSetHighlights,
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const [isSelected, setIsSelected] = useState(false);
@@ -177,270 +180,33 @@ function Note({
     }
   }
 
-  // Highlight drawing state
-  const isHighlightDrawing = useRef(false);
-  const highlightStartCharIndex = useRef(null);
-  const highlightRangeRef = useRef(null); // synchronous reference to avoid stale closures on pointerup
-  const [activeHighlightRange, setActiveHighlightRange] = useState(null); // { start, end }
-  const annotationsRef = useRef([]); // holds active rough-notation instances
-
-  // Re-render Rough Annotations whenever note.highlights, note.text, or size changes
-  useEffect(() => {
-    // Clear old rough-notation instances
-    annotationsRef.current.forEach((ann) => {
-      try {
-        ann.remove();
-      } catch (err) {
-        // ignore
+  // Highlighter pen & eraser interaction (lives directly on characters, handles rotation/scale/scroll)
+  const pen = useHighlightPen({
+    renderRef,
+    scriptTextRef,
+    scriptUrl,
+    chars,
+    enabled: isHighlighterActive,
+    tool: highlighterMode === 'eraser' ? 'eraser' : 'pen',
+    type: highlighterType,
+    color: highlighterColor,
+    highlights: note.highlights || [],
+    onChange: (nextHighlights) => {
+      if (onSetHighlights) {
+        onSetHighlights(note.id, nextHighlights);
+      } else if (onClearHighlights && nextHighlights.length === 0) {
+        onClearHighlights(note.id);
       }
-    });
-    annotationsRef.current = [];
+    },
+  });
 
-    if (!note.highlights || note.highlights.length === 0 || !renderRef.current) return;
-
-    // For each saved highlight, find the start and end span, wrap in an annotation-wrapper span, and attach annotate()
-    const spans = Array.from(renderRef.current.querySelectorAll('.note-char-span'));
-    if (spans.length === 0) return;
-
-    note.highlights.forEach((hl) => {
-      const startIndex = Math.max(0, Math.min(spans.length - 1, hl.startIndex));
-      const endIndex = Math.max(0, Math.min(spans.length - 1, hl.endIndex));
-      if (startIndex > endIndex) return;
-
-      const rangeSpans = spans.slice(startIndex, endIndex + 1);
-      if (rangeSpans.length === 0) return;
-
-      // Group consecutive spans on each visual line to annotate cleanly
-      try {
-        // Group by line: detect line wraps by comparing rect top
-        let currentLine = [rangeSpans[0]];
-        const lines = [currentLine];
-
-        for (let i = 1; i < rangeSpans.length; i++) {
-          const prevRect = rangeSpans[i - 1].getBoundingClientRect();
-          const currRect = rangeSpans[i].getBoundingClientRect();
-          if (Math.abs(currRect.top - prevRect.top) > 10) {
-            currentLine = [rangeSpans[i]];
-            lines.push(currentLine);
-          } else {
-            currentLine.push(rangeSpans[i]);
-          }
-        }
-
-        lines.forEach((lineSpans) => {
-          const first = lineSpans[0];
-          const last = lineSpans[lineSpans.length - 1];
-
-          const targetEl = document.createElement('span');
-          targetEl.className = 'rough-target-span';
-          targetEl.style.position = 'absolute';
-          // Use local offsetLeft/offsetTop relative to container so rotated notes do not misalign
-          targetEl.style.top = `${first.offsetTop}px`;
-          targetEl.style.left = `${first.offsetLeft - 1}px`;
-          targetEl.style.width = `${Math.max(8, last.offsetLeft + last.offsetWidth - first.offsetLeft + 2)}px`;
-          targetEl.style.height = `${Math.max(14, Math.max(first.offsetHeight, last.offsetHeight))}px`;
-
-          renderRef.current.appendChild(targetEl);
-
-          // For highlight type, use semi-transparent rgba or pastel colors so letters are 100% visible
-          let hlColor = hl.color || '#fde047';
-          // If it's a 6-digit hex color, convert to 65% opacity rgba for highlight background
-          if (hl.type === 'highlight' && hlColor.startsWith('#') && hlColor.length === 7) {
-            const r = parseInt(hlColor.slice(1, 3), 16);
-            const g = parseInt(hlColor.slice(3, 5), 16);
-            const b = parseInt(hlColor.slice(5, 7), 16);
-            hlColor = `rgba(${r}, ${g}, ${b}, 0.65)`;
-          }
-
-          const ann = annotate(targetEl, {
-            type: hl.type || 'highlight',
-            color: hlColor,
-            animate: false,
-            multiline: false,
-            padding: hl.type === 'highlight' ? [1, 3] : [0, 2],
-            strokeWidth: hl.type === 'highlight' ? 1.5 : 2,
-            iterations: 1, // Single crisp iteration avoids giant slanted stacked blocks
-          });
-          ann.show();
-
-          annotationsRef.current.push({
-            remove: () => {
-              try {
-                ann.remove();
-              } catch (e) {}
-              if (targetEl.parentNode) targetEl.parentNode.removeChild(targetEl);
-            },
-          });
-        });
-      } catch (err) {
-        console.error('Error creating rough-notation annotation:', err);
-      }
-    });
-
-    return () => {
-      annotationsRef.current.forEach((ann) => {
-        try {
-          ann.remove();
-        } catch (err) {
-          // ignore
-        }
-      });
-      annotationsRef.current = [];
-    };
-  }, [note.highlights, note.text, note.width, note.textWidth, note.textHeight]);
-
-  // Helper to find char index from coordinates within renderRef or ScriptText
-  const getCharIndexFromPoint = (clientX, clientY) => {
-    // If cursive script is active, hit-test through ScriptText (with exact SVG matrix inverse)
-    if (scriptUrl && scriptTextRef.current?.getCharIndexFromPoint) {
-      return scriptTextRef.current.getCharIndexFromPoint(clientX, clientY);
-    }
-
-    if (!renderRef.current) return -1;
-    const spans = Array.from(renderRef.current.querySelectorAll('.note-char-span'));
-    if (spans.length === 0) return -1;
-
-    // Check closest span by Euclidean distance
-    let closestIndex = -1;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < spans.length; i++) {
-      const rect = spans[i].getBoundingClientRect();
-      // Check if point is inside this character rect
-      if (
-        clientX >= rect.left &&
-        clientX <= rect.right &&
-        clientY >= rect.top &&
-        clientY <= rect.bottom
-      ) {
-        return i;
-      }
-      // Calculate distance to center
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const dist = Math.hypot(clientX - centerX, clientY - centerY);
-      if (dist < minDistance) {
-        minDistance = dist;
-        closestIndex = i;
-      }
-    }
-
-    return minDistance < 40 ? closestIndex : -1;
-  };
-
-  // Highlighter Pen / Eraser Pointer Event Handlers
-  const handleHighlighterPointerDown = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onFront(note.id);
-    setIsSelected(true);
-    if (onSelectNote) onSelectNote(note.id);
-
-    const charIndex = getCharIndexFromPoint(e.clientX, e.clientY);
-    if (charIndex !== -1) {
-      if (highlighterMode === 'eraser') {
-        // Find if this character is within any highlight and remove it immediately
-        if (note.highlights && note.highlights.length > 0) {
-          const hitHighlight = note.highlights.find(
-            (hl) => charIndex >= Math.min(hl.startIndex, hl.endIndex) && charIndex <= Math.max(hl.startIndex, hl.endIndex)
-          );
-          if (hitHighlight && onRemoveHighlight) {
-            onRemoveHighlight(note.id, hitHighlight.id);
-          }
-        }
-        isHighlightDrawing.current = true;
-        highlightStartCharIndex.current = charIndex;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        return;
-      }
-
-      isHighlightDrawing.current = true;
-      highlightStartCharIndex.current = charIndex;
-      const initialRange = { start: charIndex, end: charIndex };
-      highlightRangeRef.current = initialRange;
-      setActiveHighlightRange(initialRange);
-      e.currentTarget.setPointerCapture(e.pointerId);
-    }
-  };
-
-  const handleHighlighterPointerMove = (e) => {
-    if (!isHighlightDrawing.current) return;
-    const charIndex = getCharIndexFromPoint(e.clientX, e.clientY);
-    if (charIndex !== -1) {
-      if (highlighterMode === 'eraser') {
-        // Erase any highlight that the eraser crosses over while moving
-        if (note.highlights && note.highlights.length > 0) {
-          const hitHighlight = note.highlights.find(
-            (hl) => charIndex >= Math.min(hl.startIndex, hl.endIndex) && charIndex <= Math.max(hl.startIndex, hl.endIndex)
-          );
-          if (hitHighlight && onRemoveHighlight) {
-            onRemoveHighlight(note.id, hitHighlight.id);
-          }
-        }
-        return;
-      }
-
-      const start = Math.min(highlightStartCharIndex.current, charIndex);
-      const end = Math.max(highlightStartCharIndex.current, charIndex);
-      const updatedRange = { start, end };
-      highlightRangeRef.current = updatedRange;
-      setActiveHighlightRange(updatedRange);
-    }
-  };
-
-  const handleHighlighterPointerUp = (e) => {
-    if (!isHighlightDrawing.current) return;
-    isHighlightDrawing.current = false;
-
-    if (highlighterMode === 'eraser') {
-      highlightStartCharIndex.current = null;
-      highlightRangeRef.current = null;
-      return;
-    }
-
-    // Read synchronously from highlightRangeRef.current to avoid stale state closures
-    const currentRange = highlightRangeRef.current || activeHighlightRange;
-
-    if (currentRange && currentRange.start !== -1) {
-      let startIndex = currentRange.start;
-      let endIndex = currentRange.end;
-
-      // If user simply clicked on a word without dragging, expand to highlight the whole word
-      if (startIndex === endIndex && note.text) {
-        const text = note.text;
-        // Expand left to start of word
-        while (startIndex > 0 && !/\s/.test(text[startIndex - 1])) {
-          startIndex--;
-        }
-        // Expand right to end of word
-        while (endIndex < text.length - 1 && !/\s/.test(text[endIndex + 1])) {
-          endIndex++;
-        }
-      }
-
-      if (onAddHighlight) {
-        onAddHighlight(note.id, {
-          id: crypto.randomUUID(),
-          startIndex,
-          endIndex,
-          color: highlighterColor || '#fde047',
-          type: highlighterType || 'highlight',
-          createdAt: Date.now(),
-        });
-      }
-    }
-
-    highlightRangeRef.current = null;
-    setActiveHighlightRange(null);
-    highlightStartCharIndex.current = null;
-  };
+  const marks = useMemo(
+    () => marksFor(chars, note.highlights || [], pen.preview),
+    [chars, note.highlights, pen.preview]
+  );
 
   // Double-click or double-tap specifically on text/textarea: toggles textarea rotate/resize
   function handleTextareaPointerDown(e) {
-    if (isHighlighterActive) {
-      handleHighlighterPointerDown(e);
-      return;
-    }
     onFront(note.id);
     setIsSelected(true);
     if (onSelectNote) onSelectNote(note.id);
@@ -469,10 +235,6 @@ function Note({
   }
 
   function handleTextareaPointerMove(e) {
-    if (isHighlighterActive) {
-      handleHighlighterPointerMove(e);
-      return;
-    }
     if (holdTimerRef.current && holdStartPos.current) {
       const dist = Math.hypot(e.clientX - holdStartPos.current.x, e.clientY - holdStartPos.current.y);
       if (dist > 8) {
@@ -484,11 +246,7 @@ function Note({
     }
   }
 
-  function handleTextareaPointerUp(e) {
-    if (isHighlighterActive) {
-      handleHighlighterPointerUp(e);
-      return;
-    }
+  function handleTextareaPointerUp() {
     cancelHoldTimer();
     endDrag();
   }
@@ -874,7 +632,7 @@ function Note({
             caret={sel.start === sel.end ? sel.start : null}
             focused={sel.focused}
             highlights={note.highlights || []}
-            activeHighlightRange={activeHighlightRange}
+            activeHighlightRange={pen.preview}
             highlighterColor={highlighterColor}
             highlighterType={highlighterType}
             isHighlighterActive={isHighlighterActive}
@@ -887,9 +645,9 @@ function Note({
               }
             }}
             onDoubleClick={handleTextareaDoubleClick}
-            onPointerDown={handleTextareaPointerDown}
-            onPointerMove={handleTextareaPointerMove}
-            onPointerUp={handleTextareaPointerUp}
+            onPointerDown={isHighlighterActive ? pen.handlers.onPointerDown : handleTextareaPointerDown}
+            onPointerMove={isHighlighterActive ? pen.handlers.onPointerMove : handleTextareaPointerMove}
+            onPointerUp={isHighlighterActive ? pen.handlers.onPointerUp : handleTextareaPointerUp}
           />
         ) : (
           <div
@@ -899,19 +657,15 @@ function Note({
             aria-hidden="true"
           >
             {chars.map((ch, idx) => {
-              const isPreviewHighlighted =
-                activeHighlightRange &&
-                idx >= activeHighlightRange.start &&
-                idx <= activeHighlightRange.end;
-
+              const mark = marks[idx];
               return (
                 <span
                   key={ch.id}
                   data-char-index={idx}
-                  className={`note-char-span ${ch.fresh ? 'ch ch-new' : 'ch'} ${isPreviewHighlighted ? 'is-preview-highlight' : ''}`}
+                  className={`note-char-span ${ch.fresh ? 'ch ch-new' : 'ch'} ${mark?.cls || ''}`}
                   style={{
                     ...(ch.color ? { color: ch.color } : {}),
-                    ...(isPreviewHighlighted ? { backgroundColor: `${highlighterColor}77`, borderRadius: '3px' } : {}),
+                    ...(mark?.style || {}),
                   }}
                 >
                   {ch.c}
@@ -942,10 +696,14 @@ function Note({
               end: e.target.selectionEnd,
             }));
           }}
-          onPointerDown={handleTextareaPointerDown}
-          onPointerMove={handleTextareaPointerMove}
-          onPointerUp={handleTextareaPointerUp}
-          onPointerCancel={handleTextareaPointerUp}
+          {...(isHighlighterActive
+            ? pen.handlers
+            : {
+                onPointerDown: handleTextareaPointerDown,
+                onPointerMove: handleTextareaPointerMove,
+                onPointerUp: handleTextareaPointerUp,
+                onPointerCancel: handleTextareaPointerUp,
+              })}
           onDoubleClick={handleTextareaDoubleClick}
           onFocus={() => {
             setIsFocused(true);

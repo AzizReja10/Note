@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { localStorageAdapter } from './storage';
+import { shiftRanges } from './highlights';
 
 // note shape: { id, type, text, x, y, rotation, z }
 export function useNotes(storage = localStorageAdapter) {
@@ -44,11 +45,25 @@ export function useNotes(storage = localStorageAdapter) {
     return note.id;
   }, []);
 
-  const updateText = useCallback((id, text) => patch(id, { text }), [patch]);
+  const updateText = useCallback((id, text) => {
+    setNotes(list =>
+      list.map(n =>
+        n.id === id
+          ? {
+              ...n,
+              text,
+              highlights: shiftRanges(n.highlights, n.text, text),
+            }
+          : n
+      )
+    );
+  }, []);
 
   const updateTextColor = useCallback((id, textColor) => patch(id, { textColor }), [patch]);
 
   const updateFontFamily = useCallback((id, fontFamily) => patch(id, { fontFamily }), [patch]);
+
+  const setHighlights = useCallback((id, highlights) => patch(id, { highlights }), [patch]);
 
   const addHighlight = useCallback((id, highlight) => {
     setNotes(list =>
@@ -208,6 +223,7 @@ export function useNotes(storage = localStorageAdapter) {
     addHighlight,
     removeHighlight,
     clearHighlights,
+    setHighlights,
     moveNote,
     moveTextArea,
     resizeTextArea,

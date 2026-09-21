@@ -283,13 +283,18 @@ export default forwardRef(function ScriptText({
     });
 
     const list = [...(highlights || [])];
-    if (activeHighlightRange && activeHighlightRange.start != null && activeHighlightRange.end != null) {
+    if (activeHighlightRange && (activeHighlightRange.start != null || activeHighlightRange.from != null || activeHighlightRange.startIndex != null)) {
+      const start = activeHighlightRange.from ?? activeHighlightRange.start ?? activeHighlightRange.startIndex;
+      const end = activeHighlightRange.to ?? activeHighlightRange.end ?? activeHighlightRange.endIndex;
       list.push({
         id: '__preview__',
-        startIndex: activeHighlightRange.start,
-        endIndex: activeHighlightRange.end,
-        color: highlighterColor || '#facc15',
-        type: highlighterType || 'highlight',
+        startIndex: start,
+        endIndex: end,
+        from: start,
+        to: end,
+        color: activeHighlightRange.color || highlighterColor || '#facc15',
+        type: activeHighlightRange.type || highlighterType || 'highlight',
+        erase: activeHighlightRange.erase,
         isPreview: true,
       });
     }
@@ -297,9 +302,11 @@ export default forwardRef(function ScriptText({
     const results = [];
 
     list.forEach(hl => {
-      if (hl.startIndex == null || hl.endIndex == null) return;
-      const s = Math.min(hl.startIndex, hl.endIndex);
-      const e = Math.max(hl.startIndex, hl.endIndex);
+      const rawStart = hl.from ?? hl.startIndex ?? hl.start;
+      const rawEnd = hl.to ?? hl.endIndex ?? hl.end;
+      if (rawStart == null || rawEnd == null) return;
+      const s = Math.min(rawStart, rawEnd);
+      const e = Math.max(rawStart, rawEnd);
 
       const matched = itemRanges.filter(
         ir => !(ir.endUnit < s || ir.startUnit > e) && ir.it.kind !== 'nl'
@@ -343,7 +350,8 @@ export default forwardRef(function ScriptText({
         results.push({
           key: `${hl.id || 'hl'}-${lineNum}`,
           type: hl.type || 'highlight',
-          color: hl.color || '#facc15',
+          color: hl.color || '#fde047',
+          erase: hl.erase,
           isPreview: hl.isPreview,
           x: rx,
           y: ry,
@@ -361,7 +369,7 @@ export default forwardRef(function ScriptText({
     if (!layout || !onCaret) return;
     const m = svgRef.current.getScreenCTM();
     if (!m) return;
-    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());   // handles note rotation
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse()); // handles note rotation
     onCaret(indexToUnit(cells, hitTest(layout, p.x, p.y + scrollY, lineHeight)));
   }
 
@@ -392,6 +400,22 @@ export default forwardRef(function ScriptText({
     >
       {/* Layer 0: Highlights behind the ink strokes */}
       {renderedHighlights.map(hl => {
+        if (hl.erase) {
+          return (
+            <rect
+              key={hl.key}
+              x={hl.x}
+              y={hl.y}
+              width={hl.w}
+              height={hl.h}
+              rx={3}
+              fill="rgba(239, 68, 68, 0.28)"
+              stroke="rgba(239, 68, 68, 0.85)"
+              strokeWidth={1.5}
+              strokeDasharray="4 2"
+            />
+          );
+        }
         if (hl.type === 'underline') {
           return (
             <line
@@ -401,9 +425,10 @@ export default forwardRef(function ScriptText({
               x2={hl.x + hl.w}
               y2={hl.baselineY + 2.5}
               stroke={hl.color}
-              strokeWidth={3}
+              strokeWidth={2.4}
+              strokeDasharray="5 2.5"
               strokeLinecap="round"
-              opacity={hl.isPreview ? 0.6 : 0.85}
+              opacity={hl.isPreview ? 0.6 : 0.9}
               className="script-highlight-line"
             />
           );
@@ -416,19 +441,18 @@ export default forwardRef(function ScriptText({
               y={hl.y}
               width={hl.w + 2}
               height={hl.h}
-              rx={5}
-              ry={5}
+              rx={3}
+              ry={3}
               fill="none"
               stroke={hl.color}
               strokeWidth={2}
               strokeDasharray={hl.isPreview ? '4 3' : undefined}
-              opacity={hl.isPreview ? 0.7 : 0.9}
+              opacity={hl.isPreview ? 0.7 : 0.95}
               className="script-highlight-box"
             />
           );
         }
         if (hl.type === 'circle') {
-          const r = hl.h / 2;
           return (
             <rect
               key={hl.key}
@@ -436,13 +460,13 @@ export default forwardRef(function ScriptText({
               y={hl.y - 2}
               width={hl.w + 6}
               height={hl.h + 4}
-              rx={r + 2}
-              ry={r + 2}
+              rx={12}
+              ry={12}
               fill="none"
               stroke={hl.color}
               strokeWidth={2}
               strokeDasharray={hl.isPreview ? '4 3' : undefined}
-              opacity={hl.isPreview ? 0.7 : 0.9}
+              opacity={hl.isPreview ? 0.7 : 0.95}
               className="script-highlight-circle"
             />
           );
@@ -458,7 +482,7 @@ export default forwardRef(function ScriptText({
             rx={4}
             ry={4}
             fill={hl.color}
-            opacity={hl.isPreview ? 0.4 : 0.48}
+            opacity={hl.isPreview ? 0.4 : 0.55}
             className="script-highlight-marker"
           />
         );

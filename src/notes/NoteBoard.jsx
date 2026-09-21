@@ -37,6 +37,7 @@ const NoteBoard = ({
     addHighlight,
     removeHighlight,
     clearHighlights,
+    setHighlights,
     moveNote,
     moveTextArea,
     resizeTextArea,
@@ -284,6 +285,7 @@ const NoteBoard = ({
               onAddHighlight={addHighlight}
               onRemoveHighlight={removeHighlight}
               onClearHighlights={clearHighlights}
+              onSetHighlights={setHighlights}
             />
           ))}
       </div>
